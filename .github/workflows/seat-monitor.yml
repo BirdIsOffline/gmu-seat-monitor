@@ -2,9 +2,6 @@ name: GMU seat monitor
 
 on:
   schedule:
-    # Four checks per hour, avoiding the busiest start-of-hour minute.
-    # IMPORTANT: no GMU requests occur until the repository variable
-    # GMU_POLLING_APPROVED is explicitly set to true.
     - cron: "3-58/5 * * * *"
   workflow_dispatch:
     inputs:
