@@ -1,0 +1,69 @@
+name: GMU seat monitor
+
+on:
+  schedule:
+    # Four checks per hour, avoiding the busiest start-of-hour minute.
+    # IMPORTANT: no GMU requests occur until the repository variable
+    # GMU_POLLING_APPROVED is explicitly set to true.
+    - cron: "13,28,43,58 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Test Bark only, or run one GMU check (if authorized)"
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gmu-seat-monitor
+  cancel-in-progress: false
+
+jobs:
+  test-bark:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Send Bark test (NO GMU requests)
+        env:
+          BARK_DEVICE_KEY: ${{ secrets.BARK_DEVICE_KEY }}
+        run: python monitor.py --test-notification
+
+  check-seats:
+    # No unattended GMU requests until explicit authorization is recorded.
+    if: vars.GMU_POLLING_APPROVED == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'check'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Restore recent public seat status
+        uses: actions/cache/restore@v4
+        with:
+          path: seat_state.json
+          key: gmu-seat-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gmu-seat-state-
+      - name: Check both courses once and send any Bark alerts
+        env:
+          BARK_DEVICE_KEY: ${{ secrets.BARK_DEVICE_KEY }}
+        run: python monitor.py --once
+      - name: Save public seat status for next scheduled check
+        uses: actions/cache/save@v4
+        with:
+          path: seat_state.json
+          key: gmu-seat-state-${{ github.run_id }}-${{ github.run_attempt }}

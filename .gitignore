@@ -1,0 +1,10 @@
+# Never publish phone notification keys or per-run local state
+bark_key.txt
+ntfy_topic.txt
+seat_state.json
+seat_state.tmp
+.env
+*.env
+__pycache__/
+*.pyc
+.venv/
