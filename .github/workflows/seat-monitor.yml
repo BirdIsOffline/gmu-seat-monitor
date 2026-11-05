@@ -5,7 +5,7 @@ on:
     # Four checks per hour, avoiding the busiest start-of-hour minute.
     # IMPORTANT: no GMU requests occur until the repository variable
     # GMU_POLLING_APPROVED is explicitly set to true.
-    - cron: "13,28,43,58 * * * *"
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
     inputs:
       mode:
