@@ -1,0 +1,2 @@
+# Synthetic LOCAL ONLY token; never use this public value on a deployed Worker.
+INGEST_TOKEN=synthetic_local_only_token_00000000000000000000000

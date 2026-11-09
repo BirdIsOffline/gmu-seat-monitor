@@ -85,3 +85,9 @@ See architecture notes and planned improvements.
 Technologies
 Python · `requests` · JSON · REST-style HTTP APIs · GitHub Actions · cron-job.org · Bark · `unittest` / `unittest.mock`
 Note: This is an independent student project; it is not affiliated with or endorsed by George Mason University.
+
+## Offline cloud history prototype
+
+Phase 3 Part 2A adds a disabled-by-default Python ingestion client and a local
+Cloudflare Worker/D1 prototype. Production monitoring and Bark are unchanged.
+See [cloud persistence architecture, security, and offline testing](docs/CLOUD_HISTORY.md).

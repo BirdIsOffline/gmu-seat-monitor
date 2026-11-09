@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    name: Offline tests (Python 3.12)
+    name: Offline tests (Python 3.12, Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,10 +27,22 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py tests
+        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py tests cloudflare/test/parity.py
       - name: Run offline unit tests
         run: python -m unittest discover -s tests -v
       - name: Run safe demo (no GMU or Bark calls)
         run: python monitor.py --demo
       - name: Run synthetic SQLite demo (temporary database, no network)
         run: python demo_history.py
+      - name: Set up Node for local Worker tests
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+      - name: Install local Worker development dependencies
+        run: npm ci --prefix cloudflare
+      - name: Run offline Worker and Python-to-D1 parity tests
+        run: npm test --prefix cloudflare
+        env:
+          CLOUDFLARE_SEND_METRICS: 'false'
