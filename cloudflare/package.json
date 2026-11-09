@@ -1,0 +1,16 @@
+{
+  "name": "gmu-seat-history-prototype",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-only D1 ingestion prototype",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "dev": "wrangler dev --local --ip 127.0.0.1",
+    "migrate:local": "wrangler d1 migrations apply DB --local"
+  },
+  "type": "module",
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "wrangler": "4.158.0"
+  }
+}
