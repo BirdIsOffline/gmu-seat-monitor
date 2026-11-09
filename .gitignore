@@ -8,3 +8,10 @@ seat_state.tmp
 __pycache__/
 *.pyc
 .venv/
+# Local historical data and SQLite journals/backups must never be published.
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
