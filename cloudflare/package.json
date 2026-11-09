@@ -9,6 +9,12 @@
     "migrate:local": "wrangler d1 migrations apply DB --local"
   },
   "type": "module",
+  "overrides": {
+    "miniflare@4.20260730.0": {
+      "sharp": "0.35.5",
+      "undici": "7.30.1"
+    }
+  },
   "devDependencies": {
     "miniflare": "4.20260730.0",
     "wrangler": "4.158.0"
