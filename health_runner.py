@@ -47,7 +47,10 @@ def summarize_output(output, returncode):
 
 
 def write_report(report, report_path=REPORT_FILE, summary_path=None):
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    try:
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"WARNING: Could not write JSON health report: {type(exc).__name__}", file=sys.stderr)
     if summary_path:
         lines = [
             "## GMU seat-check health",
@@ -56,7 +59,10 @@ def write_report(report, report_path=REPORT_FILE, summary_path=None):
             f"**UTC timestamp:** {report['checked_at_utc']}  ",
             f"**Duration:** {report['duration_seconds']:.2f} seconds  ",
             "",
-            "| Course | Check | Public result |",
+            f"**Execution reason:** {report.get('failure_reason') or 'Completed'}  ",
+            "**Bark delivery:** Not verified by this health report.  ",
+            "",
+            "| Course | Lookup | Public result |",
             "| --- | --- | --- |",
         ]
         for row in report["courses"]:
@@ -68,8 +74,31 @@ def write_report(report, report_path=REPORT_FILE, summary_path=None):
             "The API response does not guarantee registration eligibility.",
             "",
         ]
-        with open(summary_path, "a", encoding="utf-8") as stream:
-            stream.write("\n".join(lines))
+        try:
+            with open(summary_path, "a", encoding="utf-8") as stream:
+                stream.write("\n".join(lines))
+        except OSError as exc:
+            print(f"WARNING: Could not write Actions health summary: {type(exc).__name__}", file=sys.stderr)
+
+
+def state_is_valid(path):
+    """Accept only nonempty public course snapshots suitable for cache restore."""
+    try:
+        state = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(state, dict) and bool(state) and all(
+        crn in COURSES and isinstance(row, dict)
+        and type(row.get("seatsAvailable")) is int and row["seatsAvailable"] >= 0
+        for crn, row in state.items()
+    )
+
+
+def decode_output(value):
+    """TimeoutExpired may contain bytes even when text=True."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
 
 
 def run_once(runner=subprocess.run, report_path=REPORT_FILE, summary_path=None):
@@ -77,9 +106,10 @@ def run_once(runner=subprocess.run, report_path=REPORT_FILE, summary_path=None):
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     returncode = 1
     output = ""
+    failure_reason = None
     try:
         proc = runner(
-            [sys.executable, str(HERE / "monitor.py"), "--once"],
+            [sys.executable, "-u", str(HERE / "monitor.py"), "--once"],
             cwd=str(HERE),
             capture_output=True,
             text=True,
@@ -88,27 +118,30 @@ def run_once(runner=subprocess.run, report_path=REPORT_FILE, summary_path=None):
         )
         returncode = proc.returncode
         output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
-    except subprocess.TimeoutExpired:
-        output = f"ERROR: Seat check exceeded {CHECK_TIMEOUT_SECONDS} seconds."
+    except subprocess.TimeoutExpired as exc:
+        failure_reason = f"Seat check timed out after {CHECK_TIMEOUT_SECONDS} seconds."
+        output = decode_output(exc.stdout) + "\n" + decode_output(exc.stderr)
+        output += f"\nERROR: {failure_reason}"
     except OSError as exc:
-        output = f"ERROR: Could not start monitor.py: {type(exc).__name__}"
+        failure_reason = f"Could not start monitor.py: {type(exc).__name__}"
+        output = f"ERROR: {failure_reason}"
 
     # Preserve monitor's existing logs for troubleshooting in the job output.
     if output:
         print(output, end="" if output.endswith("\n") else "\n")
     success, courses = summarize_output(output, returncode)
+    if not success and failure_reason is None:
+        failure_reason = "Monitor exited unsuccessfully or course results were incomplete."
     report = {
         "checked_at_utc": stamp,
         "duration_seconds": round(time.monotonic() - started, 2),
         "success": success,
         "return_code": returncode,
         "courses": courses,
+        "failure_reason": failure_reason,
+        "bark_delivery": "not_verified",
     }
-    try:
-        write_report(report, report_path, summary_path)
-    except OSError as exc:
-        print(f"Could not write check health report: {type(exc).__name__}", file=sys.stderr)
-        return 1
+    write_report(report, report_path, summary_path)
     print(f"HEALTH: {'PASS' if success else 'FAIL'} | "
           f"{sum(row['status'] == 'success' for row in courses)}/{len(courses)} course checks | "
           f"{report['duration_seconds']:.2f}s")
