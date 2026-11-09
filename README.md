@@ -1,5 +1,5 @@
 Campus Seat Watch — GMU Course Availability Monitor
-![Python CI](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/workflows/ci.yml/badge.svg)
+![Python CI]
 A read-only Python automation project that checks published university course availability and sends an iPhone push alert when potentially eligible seats increase. Built as a practical systems-integration project using Python, HTTP/JSON APIs, GitHub Actions, an external scheduler, and Bark notifications.
 > **Status:** Working personal prototype. This is **not** a registration bot, does not log into a student account, and cannot guarantee seat eligibility or availability. The published seat search is institution-specific; only run automated checks with the institution's permission.
 Why I built it
