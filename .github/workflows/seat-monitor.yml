@@ -56,8 +56,22 @@ jobs:
       - name: Check both courses once and send any Bark alerts
         env:
           BARK_DEVICE_KEY: ${{ secrets.BARK_DEVICE_KEY }}
-        run: python monitor.py --once
+        run: python health_runner.py
+      - name: Validate public seat state even after a failed check
+        if: always()
+        id: seat-state
+        run: |
+          python - <<'PYTHON'
+          import os
+          from health_runner import state_is_valid
+          valid = state_is_valid("seat_state.json")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"valid={str(valid).lower()}\n")
+          if not valid:
+              print("No valid public seat state available to cache.")
+          PYTHON
       - name: Save public seat status for next scheduled check
+        if: always() && steps.seat-state.outputs.valid == 'true'
         uses: actions/cache/save@v4
         with:
           path: seat_state.json
