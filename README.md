@@ -33,7 +33,7 @@ Reserved-seat filtering: alerts for increased unreserved availability, not extra
 Stateful change detection: compares public course snapshots between scheduled workflow runs.
 Noisy-event suppression: ignores instructor changes, falling seat counts, and ordinary no-change checks.
 Secure configuration: reads the Bark key from `BARK_DEVICE_KEY` in GitHub Actions Secrets (or from a local, gitignored file).
-Automated testing: 29 offline unit tests cover seat parsing, notification conditions, state persistence, and mocked integration boundaries.
+Automated testing: offline unit tests cover seat parsing, notification conditions, state persistence, health reporting, SQLite history, and mocked integration boundaries.
 Notification behavior
 Change observed	Sends an opening alert?
 Unreserved seats: 0 → 1	Yes
@@ -52,6 +52,12 @@ python monitor.py --demo
 python -m unittest discover -s tests -v
 ```
 The demo and test suite do not contact GMU or Bark.
+
+SQLite historical seat tracking (Phase 3, Part 1) is available as a separate,
+offline module. Run `python demo_history.py` for a temporary synthetic database,
+historical queries, and opening-event statistics. It does not change production
+monitoring or persist data between Actions runs. See [SQLite history documentation](docs/SQLITE_HISTORY.md)
+for the schema, API, privacy rules, and proposed future persistence architecture.
 To perform one live, read-only check only if authorized:
 ```bash
 python monitor.py --once
