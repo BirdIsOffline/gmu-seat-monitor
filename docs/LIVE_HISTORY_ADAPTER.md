@@ -35,7 +35,8 @@ flowchart TD
   either seat opened or either lookup completed. Both course observations share
   it, matching the existing check-level API. Duration uses a monotonic clock.
 - `check_once(..., capture=None)` copies each successfully returned snapshot
-  directly into the opt-in producer, before notification/state handling. No
+  directly into the opt-in producer, after that course's Bark decision and
+  seat-state persistence, before the existing two-second sleep. No
   requests are added. It never invents a result when `get_section` fails.
 - Both successful courses form one successful check. One failed lookup yields a
   failed check with only the other course's successful observation. Two failures
@@ -74,8 +75,13 @@ process kill, the OS releases it. A subsequent separately invoked submission can
 seal the surviving checkpoint with its **existing** UUID, timestamp, duration,
 failed status and completed observations. It does not fabricate a final duration
 or assume missing courses succeeded. A death before a checkpoint publishes can
-lose that observation. A death during notification/state handling may leave a
-captured observation even if that later monitoring work did not complete.
+lose that observation. In particular, interruption during Bark delivery, state
+persistence, or the interval before checkpoint publication can now leave a
+successful lookup absent from history even though its alert/state work may have
+completed. Earlier published course observations remain available in the failed
+checkpoint; missing courses are never backfilled from state. This wider crash
+window keeps synchronous history filesystem work off the current course's alert
+and state-save path. Slow capture can still delay the next course or cycle.
 
 Submission starts a separate HTTP worker and imposes a total **20-second default
 wall-clock deadline**, configurable only within `(0, 45]` seconds. It covers

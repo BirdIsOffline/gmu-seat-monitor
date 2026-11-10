@@ -204,6 +204,67 @@ class ProducerTests(unittest.TestCase):
                 self.assertIn("CAPTURE_PREPARATION_FAILED", logs)
                 self.assertNotIn(TOKEN, logs)
 
+    def test_slow_or_failing_capture_runs_after_bark_and_persisted_state(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as tmp:
+                events = []
+                state = {}
+                state_path = Path(tmp) / "seat_state.json"
+                capture = Mock()
+                def observe(term, crn, number, current):
+                    self.assertEqual(events, ["bark", "save"])
+                    self.assertEqual(json.loads(state_path.read_text())[crn], current)
+                    self.assertEqual((term, crn, number), ("202710", "17582", "304"))
+                    events.append("capture")
+                    time.sleep(0.05)  # Deliberate synchronous capture latency.
+                    if fail:
+                        raise OSError(TOKEN)
+                capture.observe.side_effect = observe
+                real_save = monitor.save_state
+                def save(current):
+                    real_save(current)
+                    events.append("save")
+                logs = io.StringIO()
+                with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304"}}),
+                      patch.object(monitor, "STATE_PATH", state_path),
+                      patch.object(monitor, "get_section", return_value=row()) as lookup,
+                      patch.object(monitor, "notify", side_effect=lambda *args: events.append("bark")),
+                      patch.object(monitor, "save_state", side_effect=save),
+                      patch.object(monitor, "time", Mock(sleep=lambda seconds: events.append(("sleep", seconds)))),
+                      contextlib.redirect_stdout(logs)):
+                    self.assertEqual(monitor.check_once("202710", state, capture), 0)
+                self.assertEqual(events, ["bark", "save", "capture", ("sleep", 2)])
+                lookup.assert_called_once_with("202710", "17582", "304")
+                self.assertNotIn(TOKEN, logs.getvalue())
+
+    def test_interruption_after_second_state_save_keeps_only_first_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = CheckCapture(root / "history-handoff")
+            state = {}
+            real_save = monitor.save_state
+            def save(current):
+                real_save(current)
+                if "17593" in current:
+                    raise KeyboardInterrupt()
+            try:
+                with (patch.object(monitor, "STATE_PATH", root / "seat_state.json"),
+                      patch.object(monitor, "get_section", side_effect=[row(), row()]) as lookup,
+                      patch.object(monitor, "notify", return_value=True) as bark,
+                      patch.object(monitor, "save_state", side_effect=save),
+                      patch.object(monitor.time, "sleep"), contextlib.redirect_stdout(io.StringIO())):
+                    with self.assertRaises(KeyboardInterrupt):
+                        monitor.check_once("202710", state, capture)
+                    self.assertEqual((lookup.call_count, bark.call_count), (2, 2))
+            finally:
+                capture.close()
+            payload = json.loads(read_prepared(capture.directory, "pending.json").body)
+            self.assertEqual((payload["status"], payload["error_code"]), ("failed", "CHECK_FAILED"))
+            self.assertEqual([o["crn"] for o in payload["observations"]], ["17582"])
+            self.assertEqual(payload["check_id"], capture.check_id)
+            self.assertEqual(datetime.fromisoformat(payload["executed_at_utc"]), capture.sampled_at)
+            self.assertEqual(set(json.loads((root / "seat_state.json").read_text())), {"17582", "17593"})
+
     def test_one_preparation_failure_does_not_poison_other_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -516,8 +516,6 @@ def check_once(term_code, state, capture=None):
             failures += 1
             continue
 
-        history_call(capture, "observe", term_code, crn, course["number"], current)
-
         print(
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
             f"{seat_message(name, current)}"
@@ -562,6 +560,9 @@ def check_once(term_code, state, capture=None):
 
         state[crn] = current
         save_state(state)
+
+        # Optional filesystem work must follow this course's alert and state save.
+        history_call(capture, "observe", term_code, crn, course["number"], current)
 
         time.sleep(2)
 
