@@ -6,6 +6,9 @@
 > delayed observations. Its direct path needs no persistent Linux host or inbox.
 > The schema, ordering and activation recommendations below describe the earlier
 > milestone and are superseded by that guide; the HTTP protocol stays compatible.
+> The subsequent [opt-in structured handoff](LIVE_HISTORY_ADAPTER.md) is now
+> implemented locally and disabled by default. It uses dedicated production
+> configuration, with no fallback to synthetic staging.
 
 The initial **offline-tested integration prototype** from
 `phase3-cloud-persistence` is merged into main. The operator reports a deployed
@@ -13,10 +16,10 @@ authenticated staging Worker/D1 and verified remote synthetic ingestion and
 point-in-time recovery. This repository's Wrangler configuration remains
 local-only, and this milestone makes no remote calls. No Cloudflare account,
 production credential, paid service, GMU request or real notification is needed
-for development. Production `monitor.py`,
-`health_runner.py`, `.github/workflows/seat-monitor.yml`, cron-job.org scheduling,
-and Bark decisions are unchanged. No production entry point imports the client.
-Setting environment variables alone does not connect the production monitor.
+for development. At that earlier milestone, production entry points remained
+untouched. The subsequent opt-in handoff preserves default monitoring, scheduling
+and Bark behavior; activating its capture and ingestion gates is future operator
+work. Staging remains a synthetic environment, separate from eventual production.
 
 The subsequent POSIX outbox milestone is documented in
 [historical reliability](HISTORY_RELIABILITY.md). It remains optional library

@@ -466,7 +466,37 @@ def save_state(state):
     path.replace(STATE_PATH)
 
 
-def check_once(term_code, state):
+def history_warning():
+    try:
+        print("HISTORY CAPTURE: CAPTURE_PREPARATION_FAILED")
+    except Exception:
+        pass
+
+
+def history_call(capture, method, *args):
+    """Optional local capture must never replace a monitoring result."""
+    if capture is not None:
+        try:
+            getattr(capture, method)(*args)
+        except Exception:
+            history_warning()
+
+
+def start_history_capture():
+    if os.getenv("GMU_HISTORY_CAPTURE_ENABLED") != "true":
+        return None
+    try:
+        from history_capture import CheckCapture
+        root = os.environ["GMU_HISTORY_CAPTURE_DIR"]
+        if not root:
+            raise ValueError()
+        return CheckCapture(root)
+    except Exception:
+        history_warning()
+        return None
+
+
+def check_once(term_code, state, capture=None):
     failures = 0
 
     for crn, course in COURSES.items():
@@ -530,6 +560,9 @@ def check_once(term_code, state):
 
         state[crn] = current
         save_state(state)
+
+        # Optional filesystem work must follow this course's alert and state save.
+        history_call(capture, "observe", term_code, crn, course["number"], current)
 
         time.sleep(2)
 
@@ -657,17 +690,28 @@ def main():
     consecutive_errors = 0
 
     while True:
+        capture = start_history_capture()
         try:
-            term_code = resolve_term_code()
-            errors = check_once(term_code, state)
+            try:
+                term_code = resolve_term_code()
+                if capture is None:
+                    errors = check_once(term_code, state)
+                else:
+                    errors = check_once(term_code, state, capture)
 
-        except SearchError as exc:
-            errors = len(COURSES)
-            print(f"ERROR: {exc}")
+            except SearchError as exc:
+                errors = len(COURSES)
+                print(f"ERROR: {exc}")
 
-        except requests.RequestException as exc:
-            errors = len(COURSES)
-            print(f"ERROR: {exc}")
+            except requests.RequestException as exc:
+                errors = len(COURSES)
+                print(f"ERROR: {exc}")
+
+            history_call(capture, "finish", errors)
+        finally:
+            # On interruption, leave the last failed checkpoint intact. A later
+            # consumer can seal it only after this process releases its lock.
+            history_call(capture, "close")
 
         if errors:
             consecutive_errors += 1

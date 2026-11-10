@@ -56,6 +56,9 @@ jobs:
       - name: Check both courses once and send any Bark alerts
         env:
           BARK_DEVICE_KEY: ${{ secrets.BARK_DEVICE_KEY }}
+          # Local structured capture only; no ingestion secret in monitoring.
+          GMU_HISTORY_CAPTURE_ENABLED: ${{ vars.GMU_HISTORY_CAPTURE_ENABLED }}
+          GMU_HISTORY_CAPTURE_DIR: ${{ runner.temp }}/gmu-history-${{ github.run_id }}-${{ github.run_attempt }}
         run: python health_runner.py
       - name: Validate public seat state even after a failed check
         if: always()
@@ -76,3 +79,19 @@ jobs:
         with:
           path: seat_state.json
           key: gmu-seat-state-${{ github.run_id }}-${{ github.run_attempt }}
+      # State persistence finishes first. Failure/cancellation of history must
+      # never suppress the monitor's health outcome or its existing cache save.
+      - name: Submit original historical observations (explicit opt-in only)
+        if: ${{ !cancelled() && vars.GMU_HISTORY_CAPTURE_ENABLED == 'true' && vars.GMU_HISTORY_ENABLED == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GMU_HISTORY_ENABLED: ${{ vars.GMU_HISTORY_ENABLED }}
+          # Dedicated production target: never fall back to synthetic staging.
+          GMU_HISTORY_PRODUCTION_ENDPOINT: ${{ vars.GMU_HISTORY_PRODUCTION_ENDPOINT }}
+          GMU_HISTORY_PRODUCTION_TOKEN: ${{ secrets.GMU_HISTORY_PRODUCTION_TOKEN }}
+        run: >-
+          python history_submit.py
+          "${{ runner.temp }}/gmu-history-${{ github.run_id }}-${{ github.run_attempt }}"
+          --deadline-seconds 20
+          --report "${{ runner.temp }}/gmu-history-report.json"

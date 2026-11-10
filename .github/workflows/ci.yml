@@ -27,13 +27,15 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py history_outbox.py tests cloudflare/test/parity.py cloudflare/test/outbox_roundtrip.py
+        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py history_outbox.py history_capture.py history_submit.py demo_live_history.py tests cloudflare/test/parity.py cloudflare/test/outbox_roundtrip.py cloudflare/test/live_roundtrip.py
       - name: Run offline unit tests
         run: python -m unittest discover -s tests -v
       - name: Run safe demo (no GMU or Bark calls)
         run: python monitor.py --demo
       - name: Run synthetic SQLite demo (temporary database, no network)
         run: python demo_history.py
+      - name: Run synthetic structured handoff demo (no external requests)
+        run: python demo_live_history.py
       - name: Set up Node for local Worker tests
         uses: actions/setup-node@v6
         with:

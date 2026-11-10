@@ -40,7 +40,9 @@ class HistoricalFileExclusionTests(unittest.TestCase):
 
     def test_other_documented_generated_files_are_ignored(self):
         paths = ["prepared.json", "seat_state.json", "seat_state.tmp",
-                 "retained-outbox.sqlite3", "new-replay.sqlite3"]
+                 "retained-outbox.sqlite3", "new-replay.sqlite3", "run_health.json",
+                 "history_report.json", "history_report.json.tmp", "history-handoff/check/pending.json",
+                 "history-handoff/check/check.json", "history-handoff/check/receipt.sha256"]
         self.assertEqual(self.ignored(paths), set(paths))
 
     def test_legitimate_source_documentation_and_fixtures_remain_visible(self):
