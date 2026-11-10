@@ -1,12 +1,21 @@
 # Cloud persistence — Phase 3, Part 2A
 
-This is an **offline-tested integration prototype**, isolated on
-`phase3-cloud-persistence`. Nothing has been deployed or connected to a live
-database. No Cloudflare account, production credential, paid service, GMU request,
-or real notification is needed for development. Production `monitor.py`,
+The initial **offline-tested integration prototype** from
+`phase3-cloud-persistence` is merged into main. The operator reports a deployed
+authenticated staging Worker/D1 and verified remote synthetic ingestion and
+point-in-time recovery. This repository's Wrangler configuration remains
+local-only, and this milestone makes no remote calls. No Cloudflare account,
+production credential, paid service, GMU request or real notification is needed
+for development. Production `monitor.py`,
 `health_runner.py`, `.github/workflows/seat-monitor.yml`, cron-job.org scheduling,
 and Bark decisions are unchanged. No production entry point imports the client.
 Setting environment variables alone does not connect the production monitor.
+
+The next milestone adds a standalone disk-backed ordered outbox. Read
+[historical reliability](HISTORY_RELIABILITY.md) for the current design, durable
+storage requirements, failure behavior, quotas and recovery procedure. Direct
+client calls below remain best-effort; this document primarily describes the
+existing ingestion protocol and initial prototype validation.
 
 ## Architecture
 
@@ -208,7 +217,8 @@ constructed or altered snapshots cannot add private or unrecognized fields.
 The default client uses connect/read timeouts of 3.05/10 seconds, up to three
 attempts and bounded exponential delays (0.25, 0.5 seconds). Limits are validated.
 It retries timeouts, connection failures, invalid acknowledgements, and HTTP
-408/429/500/502/503/504. Permanent errors and redirects are not followed/retried.
+408/429 and all 5xx responses, including Cloudflare edge failures. Permanent
+errors and redirects are not followed/retried.
 Only an exact, bounded `INGESTED` acknowledgement for the submitted ID is success.
 Logs report a fixed category and attempt; exception messages and headers are
 never printed. The default session disables ambient `.netrc` and proxy credentials;
@@ -253,7 +263,7 @@ services or Cloudflare credentials.
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py tests cloudflare/test/parity.py
+.venv/bin/python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py history_outbox.py tests cloudflare/test/parity.py cloudflare/test/outbox_roundtrip.py
 .venv/bin/python monitor.py --demo
 .venv/bin/python demo_history.py
 cd cloudflare
@@ -312,53 +322,52 @@ notification was used.
 
 ## Recovery limitations and operations still needed
 
-The immutable request is in memory, not a durable outbox. If ingestion fails
+For direct client calls, the immutable request is in memory. If ingestion fails
 after all retries or the runner exits before acknowledgement, a sample may be
 lost. Logs do not contain enough data to reconstruct observations. A timeout
 after a server commit is safe to retry with the retained UUID/body; it does not
 prove the server rolled back. There is no guarantee of exactly-once delivery,
 only idempotent storage for a stable request.
 
+The standalone `HistoryOutbox` now retains bytes and retry state on surviving
+local disk. It is not wired into production, and it cannot survive loss of an
+ephemeral runner's disk. Its contract and replay procedure are documented in
+[historical reliability](HISTORY_RELIABILITY.md).
+
 New samples must arrive in time order for each term/CRN. A delayed older sample
-will receive 409 after a newer sample commits. Future durable ordered outbox and
-replay handling must be designed before enabling production. Concurrent distinct
+will receive 409 after a newer sample commits. Durable source storage and a
+reviewed producer handoff are still required before production. Concurrent distinct
 checks may commit in a different order from collection and reject older samples.
 Do not repair this by querying GMU again, changing the UUID, or sending alerts.
 Administrative sorted imports/rebuilds need a separately reviewed tool.
 
 D1 Time Travel/export/restore capabilities, recovery windows, quotas, retention,
-and costs depend on the selected Cloudflare plan and have **not** been verified
-against an account. Local Miniflare is not a production backup or proof of live
-recovery behavior. Define an RPO/RTO, test backup/restore and replay in a separate
+and costs depend on the selected Cloudflare plan. The operator reports manually
+verified staging point-in-time recovery; this milestone does not inspect that
+account. Local Miniflare is not a production backup or proof of live recovery
+behavior. Define an RPO/RTO, test backup/restore and replay in a separate
 non-production database, protect exports, and account for deduplication history
 being lost on restore or retention. Once old check IDs are deleted, the same
 historical body may no longer deduplicate. No retention pruning is implemented.
 Missed samples cannot reconstruct transient openings between checks.
 
-## Future deployment requirements — not performed
+## Remaining activation requirements — not performed by this change
 
-1. Independent review of protocol, triggers, security, event parity, and isolation.
-   Resolve ordered durable retry/replay handling and operational ownership.
-2. An authorized operator must explicitly approve deployment, choose a suitable
-   free allocation after checking quotas/costs, and create a separate staging D1
-   database and Worker. No paid plan is assumed or introduced by this change.
-3. Use a separate reviewed deployment configuration with the real DB binding and
-   appropriate private/restricted route. Apply numbered migrations to staging;
-   verify D1's actual transaction, concurrency, FK, and trigger behavior. Restrict
-   account/API privileges to the necessary Worker and database resources.
-4. Generate the ingestion secret outside source control. Store it using
-   Cloudflare's Worker secret mechanism (future `wrangler secret put INGEST_TOKEN`)
-   and the matching GitHub Actions secret. Do not put account credentials in the
-   client. Verify TLS, log redaction, rotation/revocation, rate limiting, abuse
-   controls, request budgets, and alerts through a non-Bark operational channel.
-5. Test staging outage, timeout-after-commit, invalid auth, replay, quota exhaustion,
-   migrations, recovery, and retention. Establish backups and a tested rollback
-   plan. Disabling ingestion must not require altering normal checks or Bark.
-6. Separately review a production adapter that consumes already completed public
-   observations. Give it its own failure boundary and stable durable request
-   snapshot; enable only after explicit authorization. Keep the normal check exit
-   status and notifications independent. This prototype does not alter workflows
-   to enable ingestion, deploy, add credentials, or change scheduling.
+The operator reports that staging Worker/D1 deployment and initial remote checks
+are complete. Do not recreate or alter that environment for this milestone.
+
+1. Independently review the protocol, ordered outbox, event parity and isolation.
+2. Supply durable source storage, operational ownership, supervised historical
+   delivery and the structured producer handoff described in
+   [historical reliability](HISTORY_RELIABILITY.md). Ephemeral runner caches and
+   artifacts do not satisfy this requirement.
+3. Verify actual free-plan quotas, endpoint restrictions, least-privilege access,
+   log redaction, secret rotation, request budgets, backups and replay recovery.
+   Enter secrets out of band; no account credentials belong in client payloads.
+4. Review outage, timeout-after-commit, replay, quota and restore behavior on a
+   separately authorized non-production target before any activation.
+5. Keep monitor exit status, course checks, five-minute scheduling and Bark
+   independent. No workflow enables ingestion, deploys or adds credentials here.
 
 ## Future dashboard integration
 

@@ -4,6 +4,22 @@ This is a **read-only** Spring 2027 monitor. It checks IT 304 DL1 (CRN 17582)
 and IT 341 DL1 (CRN 17593) and alerts your iPhone using Bark. It never
 logs into Patriot Web, registers, drops, or swaps classes.
 
+## Current operating context
+
+The operating setup now uses an external five-minute workflow dispatch schedule,
+as reported by the operator. The original provisioning instructions below predate
+that setup and describe a 15-minute GitHub schedule; they are not instructions to
+change the current schedule. This reliability milestone changes neither scheduler
+nor live workflow, GMU checks, authorization settings or Bark behavior.
+
+Cloudflare staging ingestion and recovery have been verified by the operator;
+production monitoring is still disconnected. The new historical outbox is an
+offline component, with no automatic activation. Read the
+[historical reliability operations and recovery procedure](docs/HISTORY_RELIABILITY.md)
+before any future setup. It requires durable source storage; adding the outbox to
+an ephemeral Actions runner or caching it does not guarantee recovery. No cloud
+resource or database modification is part of this milestone.
+
 ## First — confirm the monitoring is allowed
 
 Ask GMU ITS or the Registrar whether scheduled, read-only public course-search

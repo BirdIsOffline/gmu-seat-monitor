@@ -1,6 +1,8 @@
 import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Miniflare } from "miniflare";
 import worker from "../src/worker.js";
@@ -232,4 +234,46 @@ test("Python client roundtrip and SQLite opening parity against real local D1", 
     ({ previous_available, new_available, classification }));
   assert.deepEqual(events, reference.events);
   assert.equal((await rows("checks")).length, reference.checks);
+});
+
+test("outbox restart after D1 commit retries identical payload before newer course observation", { timeout: 30_000 }, async () => {
+  const { spawn } = await import("node:child_process");
+  const python = process.env.PYTHON || (existsSync("../.venv/bin/python") ? "../.venv/bin/python" : "python3");
+  const directory = mkdtempSync(join(tmpdir(), "history-outbox-"));
+  const url = new URL("/v1/checks", await mf.ready).href;
+  async function run(mode) {
+    const child = spawn(python, ["test/outbox_roundtrip.py", url, join(directory, "outbox.sqlite3"), mode],
+      { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+    let out = "", err = "";
+    child.stdout.on("data", (x) => { out += x; });
+    child.stderr.on("data", (x) => { err += x; });
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    try {
+      const exit = await new Promise((resolve, reject) => { child.on("close", resolve); child.on("error", reject); });
+      return { exit, out, err };
+    } finally { clearTimeout(deadline); }
+  }
+  try {
+    const interrupted = await run("interrupt");
+    assert.equal(interrupted.exit, 23, interrupted.err);
+    assert.deepEqual(await stats(), [1, 1, 0]);
+    const recovered = await run("recover");
+    assert.equal(recovered.exit, 0, recovered.err);
+    assert.deepEqual(JSON.parse(recovered.out), { delivered: 2, attempts: [2, 1] });
+    assert.deepEqual(await stats(), [2, 2, 1]); // Retry did not add an observation/event.
+    const event = (await rows("opening_events"))[0];
+    assert.deepEqual([event.previous_available, event.new_available], [0, 1]);
+    // Simulate a point-in-time restore to the committed prefix in LOCAL D1 only.
+    const newer = "00000000-0000-4000-8000-000000000002";
+    await db.batch([
+      db.prepare("DELETE FROM opening_events"),
+      db.prepare("DELETE FROM observations WHERE check_id=?").bind(newer),
+      db.prepare("DELETE FROM checks WHERE check_id=?").bind(newer),
+    ]);
+    assert.deepEqual(await stats(), [1, 1, 0]);
+    const replayed = await run("replay");
+    assert.equal(replayed.exit, 0, replayed.err);
+    assert.deepEqual(JSON.parse(replayed.out), { replayed: 2 });
+    assert.deepEqual(await stats(), [2, 2, 1]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

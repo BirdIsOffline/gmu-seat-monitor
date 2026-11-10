@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py tests cloudflare/test/parity.py
+        run: python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py cloud_history.py history_outbox.py tests cloudflare/test/parity.py cloudflare/test/outbox_roundtrip.py
       - name: Run offline unit tests
         run: python -m unittest discover -s tests -v
       - name: Run safe demo (no GMU or Bark calls)
