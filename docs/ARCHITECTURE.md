@@ -8,6 +8,13 @@
 4. **Seat decision:** `parse\_unreserved` interprets explicitly labeled availability; `alertable\_open\_seats` limits candidate seats to total availability. The code compares newly observed candidate counts with the previous snapshot.
 5. **Push delivery:** notifications are sent through Bark using a device key in the GitHub Actions secret `BARK\_DEVICE\_KEY`.
 6. **CI:** `.github/workflows/ci.yml` uses Python unit tests with mocked network access and never runs live course checks.
+7. **Historical ingestion (disconnected):** `cloud_history.py` prepares sanitized
+   immutable UUID4 payloads for the authenticated Worker/D1 destination.
+   `history_outbox.py` adds disk-backed pending records, per-course ordering,
+   durable retry state and restart recovery. It requires surviving local storage;
+   an ephemeral Actions filesystem is insufficient. Neither production entry
+   point imports these modules. See [historical reliability design and recovery](HISTORY_RELIABILITY.md)
+   for the data flow, infrastructure still required, quotas and loss risks.
 
 ## Core decisions
 

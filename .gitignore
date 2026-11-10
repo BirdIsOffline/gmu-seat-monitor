@@ -15,6 +15,10 @@ __pycache__/
 *.sqlite-*
 *.sqlite3
 *.sqlite3-*
+# Historical outbox owner locks (never unlink one while a process holds it).
+*.db.lock
+*.sqlite.lock
+*.sqlite3.lock
 # Offline Cloudflare tooling, local bindings, and secrets
 node_modules/
 .wrangler/

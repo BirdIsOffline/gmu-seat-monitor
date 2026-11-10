@@ -100,8 +100,8 @@ def prepare_check(check_id, executed_at, duration_seconds, observations=(), *,
     return PreparedCheck(check_id, body)
 
 
-def _validate_prepared(prepared):
-    """Revalidate at the network boundary, including caller-constructed snapshots."""
+def validate_prepared(prepared):
+    """Revalidate before persistence or HTTP, including caller-made snapshots."""
     if not isinstance(prepared, PreparedCheck) or type(prepared.body) is not bytes or len(prepared.body) > MAX_BYTES:
         raise ValueError("Expected prepared public observations")
     try:
@@ -154,17 +154,17 @@ class CloudHistoryClient:
         self._sleep = sleeper
 
     @classmethod
-    def from_env(cls):
+    def from_env(cls, **kwargs):
         """Explicit call only. Merely setting variables cannot enable production."""
         if os.environ.get("GMU_HISTORY_ENABLED") != "true":
             return None
-        return cls(os.environ.get("GMU_HISTORY_ENDPOINT", ""), os.environ.get("GMU_HISTORY_TOKEN", ""))
+        return cls(os.environ.get("GMU_HISTORY_ENDPOINT", ""), os.environ.get("GMU_HISTORY_TOKEN", ""), **kwargs)
 
     def close(self):
         self._session.close()
 
     def submit(self, prepared):
-        _validate_prepared(prepared)
+        validate_prepared(prepared)
         code = "NETWORK_FAILURE"
         for attempt in range(1, self._max_attempts + 1):
             retry = True
@@ -192,7 +192,11 @@ class CloudHistoryClient:
                         status = reply.status_code
                         code = {401: "UNAUTHORIZED", 409: "CONFLICT", 400: "INVALID_REQUEST",
                                 413: "TOO_LARGE", 429: "RATE_LIMITED"}.get(status, "HTTP_FAILURE")
-                        retry = status in (408, 429, 500, 502, 503, 504)
+                        # Include Cloudflare edge errors (e.g. 522/524), not
+                        # only the statuses returned by the Worker itself.
+                        retry = status in (408, 429) or 500 <= status <= 599
+                        if retry and code == "HTTP_FAILURE":
+                            code = "RETRYABLE_HTTP_FAILURE"
             except requests.Timeout:
                 code = "TIMEOUT"
             except requests.RequestException:

@@ -19,10 +19,17 @@ The project currently performs read-only periodic checks with targeted iPhone al
 
 ## Phase 3 — Data storage and useful analytics
 
-- [ ] Introduce a simple SQLite schema (`checks`, `observations`, `opening_events`)
-- [ ] Save only public course-level seat counts and timestamps
-- [ ] Add queries for openings per day, observed availability duration, and monitoring success rate
+- [x] Offline SQLite schema (`checks`, `observations`, `opening_events`) and public-fact validation
+- [x] Queries for sampled openings per day and monitoring success rate
+- [x] Authenticated Worker/D1 ingestion; staging validation reported by operator
+- [x] Offline disk-backed ordered outbox, immutable retries and crash/restart tests
+- [ ] Provide durable source storage and a reviewed structured producer handoff before production ingestion
+- [ ] Independently review and activate historical delivery, without changing monitoring or Bark
+- [ ] Measure observed availability duration with explicit sampling/gap semantics
 - [ ] Add retention limits and avoid persisting student information
+
+See [historical reliability](HISTORY_RELIABILITY.md) for implementation scope and
+remaining data-loss risks. Caches/artifacts are not durable source storage.
 
 ## Phase 4 — Demonstration and maintainability
 

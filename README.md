@@ -91,3 +91,9 @@ Note: This is an independent student project; it is not affiliated with or endor
 Phase 3 Part 2A adds a disabled-by-default Python ingestion client and a local
 Cloudflare Worker/D1 prototype. Production monitoring and Bark are unchanged.
 See [cloud persistence architecture, security, and offline testing](docs/CLOUD_HISTORY.md).
+
+The next reliability milestone adds an isolated SQLite historical outbox with
+immutable payloads, ordered retries and process-restart recovery. It is tested
+offline, including against local D1; production remains disconnected. Durable
+delivery requires surviving storage outside disposable Actions runners.
+See [reliability architecture, setup requirements and recovery procedure](docs/HISTORY_RELIABILITY.md).
