@@ -216,12 +216,10 @@ class CloudClientTests(unittest.TestCase):
         self.assertEqual(notify.call_count, 1)  # Only the original 0 -> 1 alert.
         self.assertEqual(self.session.post.call_count, 3)
 
-    def test_production_modules_do_not_import_or_enable_cloud_history(self):
+    def test_monitoring_entry_points_do_not_import_http_history_client(self):
         root = Path(__file__).resolve().parents[1]
-        for path in ("monitor.py", "health_runner.py", ".github/workflows/seat-monitor.yml"):
-            contents = (root / path).read_text()
-            self.assertNotIn("cloud_history", contents)
-            self.assertNotIn("GMU_HISTORY", contents)
+        for path in ("monitor.py", "health_runner.py"):
+            self.assertNotIn("cloud_history", (root / path).read_text())
 
     def test_completed_capture_reports_only_matching_durable_acknowledgement(self):
         self.session.post.return_value = self.reply()

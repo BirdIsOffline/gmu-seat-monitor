@@ -6,7 +6,11 @@ It is implemented and tested offline on `feature/cloudflare-history-inbox`, base
 on fetched `origin/main` at `2e4af5b` (merged PR #4). Staging verification from the
 previous milestone is operator-reported; this change does not access that service.
 Production monitoring, Bark, cron-job.org and the operational workflow remain
-unchanged. There is still no production historical producer.
+unchanged at that milestone. The subsequent
+[structured producer and submission adapter](LIVE_HISTORY_ADAPTER.md) now exists
+locally, disabled by default. The operator reports successful staging deployment
+of 0002 and its matching Worker. This work does not re-verify or change staging;
+actual history requires a separate, dedicated production environment.
 
 This document supersedes the cloud ordering/activation recommendations in
 [CLOUD_HISTORY.md](CLOUD_HISTORY.md) and [HISTORY_RELIABILITY.md](HISTORY_RELIABILITY.md).
@@ -286,9 +290,9 @@ FROM observations WHERE term = ? AND crn = ?
 ORDER BY observed_at_utc DESC LIMIT 1;
 ```
 
-The existing workflow can eventually supply facts **from the original successful
-lookup** through a reviewed structured output from monitoring, after current
-notification/state handling. Preserve original check UUID/time and completed
+The [opt-in adapter](LIVE_HISTORY_ADAPTER.md) supplies facts **from the original
+successful lookup**, with capture failures isolated from notification/state
+handling. It remains disabled pending review and rollout authorization. Preserve original check UUID/time and completed
 course results, including partial failures; don't parse human logs, use
 `seat_state.json` as a complete check, or make additional lookups. A separate
 bounded process can prepare once and call `persist_best_effort(client, prepared)`;
@@ -297,7 +301,9 @@ also contains preparation failures and reports unconfirmed capture. Hold the
 same prepared bytes for later retries; if facts change a new call is not a retry.
 An opt-in HTTPS client gets only the ingestion bearer token through future secret
 configuration, with no GMU/Bark/account credentials. Merely setting history
-variables today does not wire any production caller. Best-effort artifacts may
+variables described in this older guide does not activate the new adapter; it
+requires separate capture and submission opt-ins plus dedicated production
+endpoint/token configuration. Best-effort artifacts may
 help an operator replay surviving data but cannot close the runner loss window.
 
 A future separately authorized read-only Worker can bind this same D1 and serve
@@ -365,7 +371,8 @@ Validation recorded locally with Python 3.12.14 and Node 24.22.1:
 | `docs/CLOUDFLARE_DURABLE_HISTORY.md` | Architecture decision, transactions, limits, migration, operations, recovery and this validation record |
 
 The offline implementation is **ready for independent review**. Staging deployment,
-live quota/CPU verification and a reviewed structured production handoff remain
-future work. No production workflow activation, GMU/Bark request, live Cloudflare
+live quota/CPU verification and production rollout remain future work. The
+subsequent handoff implementation and its offline validation are described in
+[LIVE_HISTORY_ADAPTER.md](LIVE_HISTORY_ADAPTER.md). No production workflow activation, GMU/Bark request, live Cloudflare
 operation, credential inspection, staging/recovery database modification, paid
 resource creation, push or merge was performed.

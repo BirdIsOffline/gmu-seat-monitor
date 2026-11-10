@@ -24,14 +24,17 @@ The project currently performs read-only periodic checks with targeted iPhone al
 - [x] Authenticated Worker/D1 ingestion; staging validation reported by operator
 - [x] Offline disk-backed ordered outbox, immutable retries and crash/restart tests
 - [x] Offline Cloudflare-first atomic ingestion with immutable UUIDs and chronological delayed-sample repair
-- [ ] Review and deploy schema/Worker together to staging, measure quotas and validate rollback
-- [ ] Add a reviewed structured producer handoff, with explicit reporting of unconfirmed capture and pre-Cloudflare data-loss risk
+- [x] Schema 0002 + matching Worker deployed/tested in synthetic staging (operator reported)
+- [x] Implement default-off structured producer handoff, bounded separate submission, and offline interruption/retry tests
+- [ ] Independently review handoff, production quotas/recovery and accepted ephemeral-runner loss risk
 - [ ] Independently review and activate historical delivery, without changing monitoring or Bark
 - [ ] Measure observed availability duration with explicit sampling/gap semantics
 - [ ] Add retention limits and avoid persisting student information
 
 See [Cloudflare-first history](CLOUDFLARE_DURABLE_HISTORY.md) for the current
-implementation and remaining data-loss risks. Caches/artifacts are not durable
+implementation and remaining data-loss risks. The
+[structured handoff](LIVE_HISTORY_ADAPTER.md) distinguishes staging from the
+future dedicated production target and lists the activation steps. Caches/artifacts are not durable
 source storage; stronger capture through Cloudflare outages would need an
 independent durable source.
 

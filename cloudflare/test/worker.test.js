@@ -468,3 +468,31 @@ test("direct receipt survives local D1 restart and lost acknowledgement without 
     assert.deepEqual(await durable.prepare("SELECT * FROM observations WHERE check_id=?").bind(late.check_id).first(), committed);
   } finally { await local.dispose(); rmSync(directory, { recursive: true, force: true }); }
 });
+
+test("original partial monitor check survives subprocess submission and lost receipt retry", { timeout: 15_000 }, async () => {
+  const { spawn } = await import("node:child_process");
+  const python = process.env.PYTHON || (existsSync("../.venv/bin/python") ? "../.venv/bin/python" : "python3");
+  const url = new URL("/v1/checks", await mf.ready).href;
+  const child = spawn(python, ["test/live_roundtrip.py", url],
+    { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+  let out = "", err = "";
+  child.stdout.on("data", (x) => { out += x; });
+  child.stderr.on("data", (x) => { err += x; });
+  const deadline = setTimeout(() => child.kill("SIGKILL"), 12_000);
+  try {
+    const exit = await new Promise((resolve, reject) => { child.on("close", resolve); child.on("error", reject); });
+    assert.equal(exit, 0, err);
+    const result = JSON.parse(out);
+    assert.equal(result.lookups, 2);
+    assert.equal(result.bark_calls, 1);
+    assert.deepEqual(await stats(), [1, 1, 0]);
+    const check = (await rows("checks"))[0];
+    assert.equal(check.check_id, result.check_id);
+    assert.equal(check.status, "failed");
+    assert.equal(check.error_code, "COURSE_LOOKUP_FAILED");
+    const observation = (await rows("observations"))[0];
+    assert.equal(observation.crn, "17582");
+    assert.equal(observation.unreserved_available, 1);
+    assert.equal(JSON.stringify(observation).includes("PRIVATE_TEXT"), false);
+  } finally { clearTimeout(deadline); }
+});

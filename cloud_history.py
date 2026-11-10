@@ -1,4 +1,4 @@
-"""Explicit opt-in HTTP history prototype; production entry points do not import it.
+"""Explicit opt-in HTTP history client; submissions run in a separate process.
 
 Prepare once from already completed observations, then retry the same immutable
 body. This module never fetches GMU, reads monitoring state, or notifies Bark.

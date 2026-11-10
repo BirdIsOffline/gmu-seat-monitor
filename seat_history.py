@@ -1,7 +1,7 @@
 """Offline SQLite history. Importing this module never performs network I/O.
 
 Callers supply public course facts, aware timestamps, and a stable check ID for
-retries. No production monitor or health-runner code calls this module yet.
+retries. SQLite recording stays offline; opt-in capture reuses CourseObservation.
 """
 
 from contextlib import contextmanager

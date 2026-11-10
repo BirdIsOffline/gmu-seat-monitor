@@ -96,10 +96,17 @@ The current reliability milestone implements **Cloudflare-first direct durable
 ingestion**: one D1 transaction stores immutable UUID observations and maintains
 chronological historical openings, including delayed and concurrent arrivals.
 It needs no persistent Linux host, inbox or scheduled processor. Production
-remains disconnected. Facts lost before reaching Cloudflare cannot be recovered
+recording remains disabled. A default-off structured handoff now captures original
+completed public lookups and submits immutable bodies in a separate process with
+a hard deadline. See [adapter configuration, offline tests and activation steps](docs/LIVE_HISTORY_ADAPTER.md).
+Synthetic staging is separate from the eventual dedicated production target.
+Facts lost before reaching Cloudflare cannot be recovered
 by D1. See [architecture, migration, staging/rollback and operations](docs/CLOUDFLARE_DURABLE_HISTORY.md).
 Run `CLOUDFLARE_SEND_METRICS=false npm run demo --prefix cloudflare` after installing
 the existing locked development dependencies for a disposable synthetic D1 demo.
 
 The optional [SQLite outbox](docs/HISTORY_RELIABILITY.md) remains available for a
 surviving POSIX filesystem, with its original strict local ordering policy.
+
+Run `python demo_live_history.py` for a temporary synthetic partial-check handoff,
+lost-acknowledgement retry and separate delivery outcomes. It makes no requests.

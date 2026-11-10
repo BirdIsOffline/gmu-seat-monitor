@@ -8,13 +8,17 @@
 4. **Seat decision:** `parse\_unreserved` interprets explicitly labeled availability; `alertable\_open\_seats` limits candidate seats to total availability. The code compares newly observed candidate counts with the previous snapshot.
 5. **Push delivery:** notifications are sent through Bark using a device key in the GitHub Actions secret `BARK\_DEVICE\_KEY`.
 6. **CI:** `.github/workflows/ci.yml` uses Python unit tests with mocked network access and never runs live course checks.
-7. **Historical ingestion (disconnected):** `cloud_history.py` prepares sanitized
+7. **Historical ingestion (disabled by default):** `cloud_history.py` prepares sanitized
    immutable UUID4 payloads for the authenticated Worker/D1 destination.
    One D1 transaction durably stores observations and maintains chronological
    historical opening edges, including delayed/concurrent submissions. It needs
    no inbox, scheduled processor or persistent Linux host. `history_outbox.py`
-   remains optional for surviving POSIX disk. Neither production entry point
-   imports these modules. See [Cloudflare-first history](CLOUDFLARE_DURABLE_HISTORY.md)
+   remains optional for surviving POSIX disk. `history_capture.py` copies only
+   completed public observations under an explicit monitor opt-in;
+   `history_submit.py` seals and submits them in a separate process with a hard
+   deadline and independent reporting. See [structured handoff](LIVE_HISTORY_ADAPTER.md)
+   for default-off gates, retries, cancellation and the dedicated future production
+   endpoint. See [Cloudflare-first history](CLOUDFLARE_DURABLE_HISTORY.md)
    for transaction boundaries, migration, quotas, staging/recovery and the loss
    window before facts reach Cloudflare.
 
