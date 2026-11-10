@@ -492,10 +492,12 @@ with patch.object(monitor, "get_section", side_effect=lookup), patch.object(moni
     def test_submitter_sigterm_stops_child_and_retains_original_for_retry(self):
         original = read_prepared(self.capture.directory, "pending.json").body
         report = Path(self.tmp.name) / "report.json"
+        synthetic_summary = Path(self.tmp.name) / "synthetic-actions-summary.md"
         with local_api("trickle") as (endpoint, bodies, arrived):
             proc = subprocess.Popen([sys.executable, str(ROOT / "history_submit.py"), str(self.root),
                                      "--deadline-seconds", "5", "--allow-local-http", "--report", str(report)],
-                                    env={**os.environ, **submission_env(endpoint)}, cwd=ROOT,
+                                    env={**os.environ, **submission_env(endpoint),
+                                         "GITHUB_STEP_SUMMARY": str(synthetic_summary)}, cwd=ROOT,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 self.assertTrue(arrived.wait(3))
@@ -503,6 +505,7 @@ with patch.object(monitor, "get_section", side_effect=lookup), patch.object(moni
                 output, errors = proc.communicate(timeout=2)
                 self.assertEqual(proc.returncode, 1)
                 self.assertEqual(json.loads(report.read_text())["code"], "INTERRUPTED")
+                self.assertIn("unconfirmed: INTERRUPTED", synthetic_summary.read_text())
                 self.assertEqual(bodies, [original])
                 self.assertNotIn(TOKEN.encode(), output + errors)
             finally:
