@@ -1,17 +1,19 @@
 import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Miniflare } from "miniflare";
 import worker from "../src/worker.js";
 
 const TOKEN = "synthetic_local_only_token_00000000000000000000000";
 const MAX_BYTES = 64 * 1024;
 let mf, db;
-const migrations = readFileSync(new URL("../migrations/0001_history.sql", import.meta.url), "utf8")
-  .split("-- statement-breakpoint").map((s) => s.trim()).filter((s) => s && !s.startsWith("-- D1"));
+const migrationFiles = readdirSync(new URL("../migrations/", import.meta.url)).filter((s) => s.endsWith(".sql")).sort();
+const migration = (name) => readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8")
+  .split("-- statement-breakpoint").map((s) => s.replace(/^\s*--[^\n]*(?:\n|$)/gm, "").trim()).filter(Boolean);
+const migrations = migrationFiles.flatMap(migration);
 const course = (changes = {}) => ({ term: "202710", subject: "IT", course_number: "304", section: "DL1",
   crn: "17582", total_available: 0, reserved_summary: { unreservedAvailable: 0 }, ...changes });
 const payload = (changes = {}) => ({ version: 1, check_id: randomUUID(),
@@ -29,14 +31,25 @@ const rows = async (table) => (await db.prepare(`SELECT * FROM ${table} ORDER BY
 async function stats() {
   return Promise.all(["checks", "observations", "opening_events"].map(async (t) => (await rows(t)).length));
 }
+const instance = (options = {}) => new Miniflare({ modules: true,
+  scriptPath: new URL("../src/worker.js", import.meta.url).pathname,
+  compatibilityDate: "2026-07-01", d1Databases: ["DB"], bindings: { INGEST_TOKEN: TOKEN },
+  host: "127.0.0.1", port: 0,
+  outboundService: () => { throw new Error("External network forbidden"); }, ...options,
+});
+const sample = (minute, total) => payload({
+  executed_at_utc: `2026-11-09T00:${String(minute).padStart(2, "0")}:00.000000+00:00`,
+  observations: [course({ total_available: total, reserved_summary: null })],
+});
+const edges = async (database = db) => (await database.prepare(`
+  SELECT p.observed_at_utc AS previous_time, n.observed_at_utc AS new_time,
+    e.previous_available, e.new_available, e.classification
+  FROM opening_events e JOIN observations p ON p.observation_id=e.previous_observation_id
+    JOIN observations n ON n.observation_id=e.observation_id
+  ORDER BY n.term, n.crn, n.observed_at_utc`).all()).results;
 
 before(async () => {
-  mf = new Miniflare({ modules: true, scriptPath: new URL("../src/worker.js", import.meta.url).pathname,
-    compatibilityDate: "2026-07-01", d1Databases: ["DB"], bindings: { INGEST_TOKEN: TOKEN },
-    host: "127.0.0.1", port: 0,
-    // Any unintended Worker outbound fetch fails; tests never call external services.
-    outboundService: () => { throw new Error("External network forbidden"); },
-  });
+  mf = instance();
   db = await mf.getD1Database("DB");
   await db.batch(migrations.map((sql) => db.prepare(sql)));
 });
@@ -154,10 +167,10 @@ test("reserved-only changes do not generate events", async () => {
   assert.deepEqual(await stats(), [2, 2, 0]);
 });
 
-test("out-of-order, same-time and changed identity roll back entire batch", async () => {
+test("same-time and changed identity roll back entire batch", async () => {
   const baseline = payload();
   await send(baseline);
-  for (const changes of [{}, { executed_at_utc: "2026-11-08T00:00:00.000000+00:00" },
+  for (const changes of [{},
     { executed_at_utc: "2026-11-10T00:00:00.000000+00:00", observations: [course({ section: "DL2" })] }]) {
     const p = payload(changes);
     // A different course is inserted first, then the conflict must roll it back.
@@ -193,11 +206,11 @@ test("foreign keys, uniqueness, and event constraints remain active", async () =
   await send(payload());
   const id = (await rows("checks"))[0].check_id;
   await assert.rejects(db.prepare("DELETE FROM checks WHERE check_id=?").bind(id).run(), /FOREIGN KEY/);
-  await assert.rejects(db.prepare("UPDATE observations SET total_available=-1").run(), /CHECK/);
+  await assert.rejects(db.prepare("UPDATE observations SET total_available=-1").run(), /IMMUTABLE_OBSERVATION/);
   await assert.rejects(db.prepare("UPDATE checks SET status='failed', error_code=NULL").run(), /CHECK/);
   assert.equal((await db.prepare("PRAGMA foreign_keys").first()).foreign_keys, 1);
   const indexes = (await db.prepare("PRAGMA index_list(observations)").all()).results;
-  assert.ok(indexes.some((i) => i.name === "idx_observations_course_time"));
+  assert.ok(indexes.some((i) => i.name === "idx_observations_timeline"));
   await send(payload({ executed_at_utc: "2026-11-10T00:00:00.000000+00:00",
     observations: [course({ total_available: 1, reserved_summary: null })] }));
   await assert.rejects(db.prepare(`INSERT INTO opening_events
@@ -216,7 +229,7 @@ test("term and CRN maintain separate first-sample baselines", async () => {
   assert.deepEqual(await stats(), [3, 3, 0]);
 });
 
-test("Python client roundtrip and SQLite opening parity against real local D1", { timeout: 30_000 }, async () => {
+test("shuffled Python submissions match chronological SQLite reference and UUID5", { timeout: 30_000 }, async () => {
   const python = process.env.PYTHON || (existsSync("../.venv/bin/python") ? "../.venv/bin/python" : "python3");
   // Async child required: Miniflare must keep servicing localhost requests.
   const { spawn } = await import("node:child_process");
@@ -227,10 +240,12 @@ test("Python client roundtrip and SQLite opening parity against real local D1", 
   const exit = await new Promise((resolve, reject) => { child.on("close", resolve); child.on("error", reject); });
   assert.equal(exit, 0, err);
   const reference = JSON.parse(out);
-  const actual = (await rows("observations")).map(({ total_available, unreserved_available, classification, potential_available }) =>
-    ({ total_available, unreserved_available, classification, potential_available }));
+  const actual = (await db.prepare("SELECT * FROM observations ORDER BY observed_at_utc").all()).results
+    .map(({ total_available, unreserved_available, classification, potential_available, observation_uuid }) =>
+      ({ total_available, unreserved_available, classification, potential_available, observation_uuid }));
   assert.deepEqual(actual, reference.observations);
-  const events = (await rows("opening_events")).map(({ previous_available, new_available, classification }) =>
+  const events = (await db.prepare("SELECT * FROM opening_events ORDER BY detected_at_utc").all()).results
+    .map(({ previous_available, new_available, classification }) =>
     ({ previous_available, new_available, classification }));
   assert.deepEqual(events, reference.events);
   assert.equal((await rows("checks")).length, reference.checks);
@@ -276,4 +291,180 @@ test("outbox restart after D1 commit retries identical payload before newer cour
     assert.deepEqual(JSON.parse(replayed.out), { replayed: 2 });
     assert.deepEqual(await stats(), [2, 2, 1]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("delayed samples repair both chronological edges without changing stored facts", async () => {
+  const first = sample(0, 0), last = sample(10, 2), middle = sample(5, 1);
+  await send(first); await send(last);
+  const originals = await rows("observations");
+  assert.deepEqual((await edges()).map((e) => [e.previous_available, e.new_available]), [[0, 2]]);
+  assert.equal((await send(middle)).status, 200);
+  assert.deepEqual((await edges()).map((e) => [e.previous_available, e.new_available]), [[0, 1], [1, 2]]);
+  assert.deepEqual((await rows("observations")).slice(0, 2), originals);
+  // A late unknown sample invalidates the inferred middle -> last opening.
+  assert.equal((await send(sample(7, null))).status, 200);
+  assert.deepEqual((await edges()).map((e) => [e.previous_available, e.new_available]), [[0, 1]]);
+  const beforeRetry = await edges();
+  assert.equal((await send(middle)).status, 200);
+  assert.deepEqual(await edges(), beforeRetry);
+  assert.deepEqual(await stats(), [4, 4, 1]);
+});
+
+test("an older baseline creates a successor opening and a late full sample can move it", async () => {
+  await send(sample(10, 1));
+  assert.equal((await rows("opening_events")).length, 0);
+  await send(sample(0, 0));
+  assert.equal((await edges())[0].previous_time, sample(0, 0).executed_at_utc);
+  // Inserting a positive sample moves the opening earlier, rather than duplicating it.
+  await send(sample(5, 1));
+  assert.equal((await edges()).length, 1);
+  assert.equal((await edges())[0].new_time, sample(5, 1).executed_at_utc);
+  // A full sample after that now establishes an additional observed opening.
+  await send(sample(7, 0));
+  assert.deepEqual((await edges()).map((e) => [e.previous_available, e.new_available]), [[0, 1], [0, 1]]);
+});
+
+test("submillisecond timestamps retain their original chronological order", async () => {
+  const checks = [0, 1, 2].map((total, i) => ({ ...sample(0, total),
+    executed_at_utc: `2026-11-09T00:00:00.00000${i + 1}+00:00`,
+  }));
+  for (const i of [2, 0, 1]) assert.equal((await send(checks[i])).status, 200);
+  assert.deepEqual((await edges()).map((e) => [e.previous_time, e.new_time]), [
+    [checks[0].executed_at_utc, checks[1].executed_at_utc],
+    [checks[1].executed_at_utc, checks[2].executed_at_utc],
+  ]);
+});
+
+test("concurrent distinct multi-course writes converge to chronological history", async () => {
+  const totals = [0, 2, 1, null, 3, 0, 1, 2, 2, 0, 1, 0];
+  const checks = totals.map((total, i) => {
+    const p = sample(i, total);
+    p.observations.push(course({ crn: "17593", course_number: "341", total_available: 9 + i,
+      reserved_summary: { unreservedAvailable: 0 } }));
+    return p;
+  });
+  const replies = await Promise.all([...checks].reverse().map((p) => send(p)));
+  assert.ok(replies.every((r) => r.status === 200));
+  const actual = await edges();
+  assert.deepEqual(actual.map((e) => [e.previous_available, e.new_available]), [[0, 2], [0, 1], [1, 2], [0, 1]]);
+  assert.deepEqual(actual.map((e) => e.new_time), [1, 6, 7, 10].map((i) => checks[i].executed_at_utc));
+  assert.deepEqual(await stats(), [12, 24, 4]);
+  const snapshot = await rows("observations");
+  assert.ok((await Promise.all(checks.map((p) => send(p)))).every((r) => r.status === 200));
+  assert.deepEqual(await rows("observations"), snapshot);
+  assert.deepEqual(await edges(), actual);
+});
+
+test("concurrent contradictory UUID reuse and tied sample times fail atomically", async () => {
+  const a = sample(0, 0), b = { ...a, duration_seconds: 1 };
+  assert.deepEqual((await Promise.all([send(a), send(b)])).map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(await stats(), [1, 1, 0]);
+  // Both submit the same timestamp to a new course: one whole check must lose.
+  const tied = [sample(1, 1), sample(1, 2)].map((p, i) => ({ ...p, observations: [
+    course({ crn: "17593", course_number: "341" }), course({ crn: String(20000 + i) }),
+  ] }));
+  assert.deepEqual((await Promise.all(tied.map((p) => send(p)))).map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(await stats(), [2, 3, 0]);
+});
+
+test("interruption during successor repair rolls back receipt, deletion and both edges", async () => {
+  await send(sample(0, 0)); await send(sample(10, 2));
+  const before = await Promise.all([rows("checks"), rows("observations"), rows("opening_events")]);
+  const successor = before[1][1].observation_id;
+  await db.prepare(`CREATE TRIGGER fail_successor BEFORE INSERT ON opening_events
+    WHEN NEW.observation_id=${successor} BEGIN SELECT RAISE(ABORT, 'synthetic interruption'); END`).run();
+  const late = sample(5, 1);
+  try {
+    for (let i = 0; i < 3; i++) {
+      assert.equal((await send(late)).status, 503);
+      assert.deepEqual(await Promise.all([rows("checks"), rows("observations"), rows("opening_events")]), before);
+    }
+  } finally { await db.prepare("DROP TRIGGER fail_successor").run(); }
+  assert.equal((await send(late)).status, 200);
+  assert.deepEqual(await stats(), [3, 3, 2]);
+  assert.equal((await send(late)).status, 200);
+  assert.deepEqual(await stats(), [3, 3, 2]);
+});
+
+test("maximum batch uses two D1 statements and retains immutable UUIDs and receipt", async () => {
+  const p = payload({ observations: Array.from({ length: 50 }, (_, i) => course({ crn: String(10000 + i) })) });
+  const boundedDB = { prepare: (sql) => db.prepare(sql), async batch(statements) {
+    assert.equal(statements.length, 2);
+    return db.batch(statements);
+  } };
+  assert.equal((await worker.fetch(request(p), { DB: boundedDB, INGEST_TOKEN: TOKEN })).status, 200);
+  const originalCheck = await rows("checks"), originals = await rows("observations");
+  assert.match(originalCheck[0].received_at_utc, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}\+00:00$/);
+  assert.equal(new Set(originals.map((r) => r.observation_uuid)).size, 50);
+  for (const row of originals) assert.match(row.observation_uuid, /^[a-f0-9-]{14}5[a-f0-9-]{21}$/);
+  assert.equal((await send(p)).status, 200);
+  assert.deepEqual(await rows("checks"), originalCheck);
+  assert.deepEqual(await rows("observations"), originals);
+  await assert.rejects(db.prepare("UPDATE observations SET observation_uuid=observation_uuid").run(), /IMMUTABLE_OBSERVATION/);
+  for (const assignment of ["duration_seconds=1", "received_at_utc=NULL", "executed_at_utc='changed'"]) {
+    await assert.rejects(db.prepare(`UPDATE checks SET ${assignment}`).run(), /IMMUTABLE_CHECK/);
+  }
+  assert.deepEqual(await stats(), [1, 50, 0]);
+});
+
+test("0002 migrates populated 0001 without changing observations, events or retry identity", async () => {
+  const local = instance();
+  try {
+    const legacy = await local.getD1Database("DB");
+    await legacy.batch(migration("0001_history.sql").map((sql) => legacy.prepare(sql)));
+    const checks = [sample(0, 0), sample(10, 2)];
+    for (const p of checks) {
+      const total = p.observations[0].total_available;
+      const canonical = JSON.stringify([1, p.executed_at_utc, .25, "success", null,
+        [["202710", "IT", "304", "DL1", "17582", total, null, "null", total ? "possible" : "full", total]]]);
+      await legacy.batch([
+        legacy.prepare(`INSERT INTO checks VALUES (?, ?, 'success', .25, NULL, ?)`)
+          .bind(p.check_id, p.executed_at_utc, createHash("sha256").update(canonical).digest("hex")),
+        legacy.prepare(`INSERT INTO observations
+          (check_id, term, subject, course_number, section, crn, total_available, unreserved_available,
+           reserved_summary_json, observed_at_utc, classification, potential_available)
+          VALUES (?, '202710', 'IT', '304', 'DL1', '17582', ?, NULL, 'null', ?, ?, ?)`)
+          .bind(p.check_id, total, p.executed_at_utc, total ? "possible" : "full", total),
+      ]);
+    }
+    const beforeObservations = (await legacy.prepare("SELECT * FROM observations ORDER BY observation_id").all()).results;
+    const beforeEvents = await edges(legacy);
+    assert.equal((await worker.fetch(request(sample(5, 1)), { DB: legacy, INGEST_TOKEN: TOKEN })).status, 503);
+    await legacy.batch(migration("0002_ordered_timeline.sql").map((sql) => legacy.prepare(sql)));
+    const migrated = (await legacy.prepare("SELECT * FROM observations ORDER BY observation_id").all()).results;
+    assert.deepEqual(migrated.map(({ observation_uuid, ...r }) => r), beforeObservations);
+    for (const row of migrated) assert.match(row.observation_uuid, /^[a-f0-9-]{14}4[a-f0-9-]{21}$/);
+    assert.deepEqual(await edges(legacy), beforeEvents);
+    assert.equal((await legacy.prepare("SELECT received_at_utc FROM checks LIMIT 1").first()).received_at_utc, null);
+    for (const p of checks) assert.equal((await worker.fetch(request(p), { DB: legacy, INGEST_TOKEN: TOKEN })).status, 200);
+    assert.deepEqual((await legacy.prepare("SELECT * FROM observations ORDER BY observation_id").all()).results, migrated);
+    assert.equal((await worker.fetch(request(sample(5, 1)), { DB: legacy, INGEST_TOKEN: TOKEN })).status, 200);
+    assert.deepEqual((await edges(legacy)).map((e) => [e.previous_available, e.new_available]), [[0, 1], [1, 2]]);
+  } finally { await local.dispose(); }
+});
+
+test("direct receipt survives local D1 restart and lost acknowledgement without a producer disk", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "history-direct-"));
+  let local = instance({ d1Persist: directory });
+  const early = sample(0, 0), late = sample(10, 2), delayed = sample(5, 1);
+  const submit = async (p) => local.dispatchFetch("http://localhost/v1/checks", {
+    method: "POST", headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(p),
+  });
+  try {
+    let durable = await local.getD1Database("DB");
+    await durable.batch(migrations.map((sql) => durable.prepare(sql)));
+    await submit(late); // Deliberately discard response, as if the reply was lost.
+    const committed = await durable.prepare("SELECT * FROM observations").first();
+    await local.dispose();
+    local = instance({ d1Persist: directory });
+    durable = await local.getD1Database("DB");
+    assert.deepEqual(await durable.prepare("SELECT * FROM observations").first(), committed);
+    assert.equal((await submit(late)).status, 200); // Same retained UUID/body.
+    assert.equal((await submit(early)).status, 200);
+    assert.equal((await submit(delayed)).status, 200);
+    assert.deepEqual((await edges(durable)).map((e) => [e.previous_available, e.new_available]), [[0, 1], [1, 2]]);
+    assert.equal((await durable.prepare("SELECT count(*) AS n FROM checks").first()).n, 3);
+    assert.deepEqual(await durable.prepare("SELECT * FROM observations WHERE check_id=?").bind(late.check_id).first(), committed);
+  } finally { await local.dispose(); rmSync(directory, { recursive: true, force: true }); }
 });

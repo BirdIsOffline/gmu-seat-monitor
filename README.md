@@ -92,8 +92,14 @@ Phase 3 Part 2A adds a disabled-by-default Python ingestion client and a local
 Cloudflare Worker/D1 prototype. Production monitoring and Bark are unchanged.
 See [cloud persistence architecture, security, and offline testing](docs/CLOUD_HISTORY.md).
 
-The next reliability milestone adds an isolated SQLite historical outbox with
-immutable payloads, ordered retries and process-restart recovery. It is tested
-offline, including against local D1; production remains disconnected. Durable
-delivery requires surviving storage outside disposable Actions runners.
-See [reliability architecture, setup requirements and recovery procedure](docs/HISTORY_RELIABILITY.md).
+The current reliability milestone implements **Cloudflare-first direct durable
+ingestion**: one D1 transaction stores immutable UUID observations and maintains
+chronological historical openings, including delayed and concurrent arrivals.
+It needs no persistent Linux host, inbox or scheduled processor. Production
+remains disconnected. Facts lost before reaching Cloudflare cannot be recovered
+by D1. See [architecture, migration, staging/rollback and operations](docs/CLOUDFLARE_DURABLE_HISTORY.md).
+Run `CLOUDFLARE_SEND_METRICS=false npm run demo --prefix cloudflare` after installing
+the existing locked development dependencies for a disposable synthetic D1 demo.
+
+The optional [SQLite outbox](docs/HISTORY_RELIABILITY.md) remains available for a
+surviving POSIX filesystem, with its original strict local ordering policy.

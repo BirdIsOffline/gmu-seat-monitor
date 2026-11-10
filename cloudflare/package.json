@@ -5,6 +5,7 @@
   "description": "Offline-only D1 ingestion prototype",
   "scripts": {
     "test": "node --test --test-concurrency=1 test/*.test.js",
+    "demo": "node demo_timeline.js",
     "dev": "wrangler dev --local --ip 127.0.0.1",
     "migrate:local": "wrangler d1 migrations apply DB --local"
   },

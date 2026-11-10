@@ -220,3 +220,25 @@ def persist_best_effort(client, prepared):
     except Exception:
         LOGGER.warning("Historical ingestion failed: CLIENT_ERROR")
         return IngestionResult(False, "CLIENT_ERROR", 0)
+
+
+def capture_completed_best_effort(client, *args, **kwargs):
+    """Future Cloudflare-first boundary from already completed public facts.
+
+    Caller owns the UUID and must retain it/its facts for any later retry. Success
+    means a matching D1 commit acknowledgement, never merely local preparation.
+    A failed result is unconfirmed: the server may have committed before a lost
+    reply. This helper cannot recover a body lost with an ephemeral runner.
+    Invoke after monitoring/notifications, within a separate process deadline.
+    """
+    if client is None:
+        return IngestionResult(False, "DISABLED", 0)
+    try:
+        prepared = prepare_check(*args, **kwargs)
+    except Exception:
+        LOGGER.warning("Historical capture failed: CAPTURE_PREPARATION_FAILED")
+        return IngestionResult(False, "CAPTURE_PREPARATION_FAILED", 0)
+    result = persist_best_effort(client, prepared)
+    if not result.success:
+        LOGGER.warning("Historical capture unconfirmed: %s; retain original UUID and facts for retry", result.code)
+    return result
