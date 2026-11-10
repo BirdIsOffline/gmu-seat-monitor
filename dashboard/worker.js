@@ -16,13 +16,13 @@ header{display:flex;justify-content:space-between;align-items:center;gap:14px;fl
 .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}button,input{font:inherit;border-radius:8px}input{background:#0c1323;border:1px solid #43516b;padding:12px;color:#fff;min-width:240px;max-width:100%}
 button{background:#255fdb;color:white;border:0;padding:11px 16px;cursor:pointer}button:hover{background:#3579f7}button[aria-pressed="true"]{background:#fff;color:#0b1426}button:disabled{opacity:.5;cursor:wait}
 #rangeButtons{display:flex;gap:8px}#status{min-height:22px;font-size:.88rem;color:#bdd4ff}#status[role="alert"]{color:#ffb4b4}
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric{border:1px solid #28364e;border-radius:12px;padding:16px;background:#111827}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.cadence-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:12px}.metric{border:1px solid #28364e;border-radius:12px;padding:16px;background:#111827}
 .metric .label{color:#a3adbf;font-size:.81rem}.metric strong{font-size:1.6rem;display:block;margin-top:7px;font-variant-numeric:tabular-nums}
 .key{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#aeb9ce}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:#6bc7ff}
 .dot.second{background:#fbbf74}.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
 table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td{padding:11px 7px;border-bottom:1px solid #26334a}th{color:#aeb9ce;font-weight:600}
 .note{color:#c6d1df;font-size:.85rem;line-height:1.5}.scroll{overflow-x:auto}
-@media(max-width:700px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px 14px 45px}canvas{height:240px}table{font-size:.75rem}}
+@media(max-width:700px){.metrics,.cadence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px 14px 45px}canvas{height:240px}table{font-size:.75rem}}
 </style>
 </head>
 <body><main>
@@ -37,7 +37,17 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Recorded check success</div><strong id="rate">—</strong></div>
 <div class="metric"><div class="label">IT 304 · Total seats</div><strong id="it304">—</strong></div>
 <div class="metric"><div class="label">IT 341 · Total seats</div><strong id="it341">—</strong></div></section>
-<section class="panel" style="margin-top:18px"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span>IT 304 DL1 · 17582</span><span><span class="dot second"></span>IT 341 DL1 · 17593</span></div>
+<section class="panel" style="margin-top:18px" aria-label="Recorded check cadence">
+<h2>Recorded check cadence</h2>
+<div class="cadence-grid">
+<div class="metric"><div class="label">Measured intervals</div><strong id="gapIntervals">—</strong></div>
+<div class="metric"><div class="label">Average gap</div><strong id="gapAverage">—</strong></div>
+<div class="metric"><div class="label">Longest gap</div><strong id="gapLongest">—</strong></div>
+<div class="metric"><div class="label">Gaps over 10 min</div><strong id="gap10">—</strong></div>
+<div class="metric"><div class="label">Gaps over 15 min</div><strong id="gap15">—</strong></div>
+</div>
+<p class="note">Calculated only between consecutive checks stored in the selected window. Does not measure missed triggers before the first record or after the last record, and does not prove every scheduled run occurred. Durations are in minutes.</p></section>
+<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span>IT 304 DL1 · 17582</span><span><span class="dot second"></span>IT 341 DL1 · 17593</span></div>
 <div class="chart"><canvas id="chart" role="img" aria-label="Line chart of reported total available seats for both courses"></canvas></div>
 <p class="note">These are periodic snapshots, not exact seat-opening times. A line does not guarantee seats remained available between checks. Gaps over 15 minutes break the line. An unknown unreserved count must never be interpreted as seats available for general registration.</p></section>
 <section class="panel"><h2>Latest course snapshots</h2><div class="scroll"><table><thead><tr><th>Course</th><th>Sample time (local)</th><th>Total</th><th>Unreserved</th><th>Classification</th></tr></thead><tbody id="latestRows"><tr><td colspan="5">No data loaded.</td></tr></tbody></table></div></section>
@@ -61,6 +71,12 @@ async function load(){
  const data=await resp.json();samples=data.samples;
  byId('checks').textContent=data.health.total;
  byId('rate').textContent=data.health.total?((100*data.health.success/data.health.total).toFixed(1)+'%'):'—';
+ const gaps=data.cadence;
+ byId('gapIntervals').textContent=gaps.measured_intervals;
+ byId('gapAverage').textContent=gaps.average_minutes===null?'—':gaps.average_minutes.toFixed(2);
+ byId('gapLongest').textContent=gaps.longest_gap_minutes===null?'—':gaps.longest_gap_minutes.toFixed(2);
+ byId('gap10').textContent=gaps.gaps_over_10_minutes;
+ byId('gap15').textContent=gaps.gaps_over_15_minutes;
  const latest={};for(const s of samples)latest[s.crn]=s;
  for(const crn of ['17582','17593']){const s=latest[crn];byId(crn==='17582'?'it304':'it341').textContent=s?pretty(s.total_available):'—'}
  const tbody=byId('latestRows');tbody.replaceChildren();
@@ -132,7 +148,7 @@ function utcCutoff(ms) {
 async function dashboard(db, range) {
   const since = utcCutoff(RANGES[range]);
   // Fixed SQL and bound parameters only. No D1 write statements and no arbitrary SQL endpoint.
-  const [healthQuery, sampleQuery, eventQuery] = await Promise.all([
+  const [healthQuery, sampleQuery, eventQuery, cadenceQuery] = await Promise.all([
     db.prepare(`SELECT COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END),0) AS success,
       COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed,
@@ -144,9 +160,25 @@ async function dashboard(db, range) {
       FROM opening_events e JOIN observations o ON e.observation_id=o.observation_id
       WHERE e.detected_at_utc >= ? AND o.crn IN (?, ?)
       ORDER BY e.detected_at_utc DESC LIMIT 50`).bind(since, ...IDS).all(),
+    db.prepare(`WITH ordered_checks AS (
+        SELECT executed_at_utc,
+          LAG(executed_at_utc) OVER (ORDER BY executed_at_utc) AS previous_check
+        FROM checks WHERE executed_at_utc >= ?
+      ), intervals AS (
+        SELECT (julianday(executed_at_utc) - julianday(previous_check)) * 1440.0 AS minutes
+        FROM ordered_checks WHERE previous_check IS NOT NULL
+      )
+      SELECT COUNT(*) AS measured_intervals,
+        ROUND(AVG(minutes), 2) AS average_minutes,
+        ROUND(MAX(minutes), 2) AS longest_gap_minutes,
+        COALESCE(SUM(CASE WHEN minutes > 10 THEN 1 ELSE 0 END), 0) AS gaps_over_10_minutes,
+        COALESCE(SUM(CASE WHEN minutes > 15 THEN 1 ELSE 0 END), 0) AS gaps_over_15_minutes
+      FROM intervals`).bind(since).all(),
   ]);
   return { range, health: healthQuery.results[0] ?? { total: 0, success: 0, failed: 0, latest: null },
-    samples: sampleQuery.results, events: eventQuery.results };
+    samples: sampleQuery.results, events: eventQuery.results,
+    cadence: cadenceQuery.results[0] ?? { measured_intervals: 0, average_minutes: null,
+      longest_gap_minutes: null, gaps_over_10_minutes: 0, gaps_over_15_minutes: 0 } };
 }
 
 export default {
