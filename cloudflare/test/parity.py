@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import random
 import sys
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
@@ -32,6 +33,8 @@ def main(endpoint):
                      (0, None), (2, {}), (0, None), (1, ""),
                      (9, {"reservedAvailable": 9}), (2, {"unreservedRemaining": 20}),
                      (0, {"unreservedAvailable": 1, "unreservedRemaining": 1})]
+            prepared_checks = []
+            expected_uuids = {}
             for i, (total, summary) in enumerate(cases):
                 check_id = str(uuid.uuid4())
                 timestamp = start + timedelta(minutes=i)
@@ -39,6 +42,12 @@ def main(endpoint):
                 kwargs = {"status": "failed", "error_code": "COURSE_LOOKUP_FAILED"} if i == 10 else {}
                 prepared = prepare_check(check_id, timestamp, 0.25, observations, **kwargs)
                 history.record_check(check_id, timestamp, 0.25, observations, **kwargs)
+                prepared_checks.append(prepared)
+                expected_uuids[check_id] = str(uuid.uuid5(uuid.UUID(check_id), "202710:17582"))
+            # Independent SQLite reference always processes chronologically;
+            # direct D1 receives delayed samples in a deliberately shuffled order.
+            random.Random(1234).shuffle(prepared_checks)
+            for prepared in prepared_checks:
                 result = client.submit(prepared)
                 assert result.success, result
                 assert client.submit(prepared).success  # Same immutable body, no new GMU work.
@@ -48,7 +57,9 @@ def main(endpoint):
             assert client.submit(prepare_check(check_id, timestamp, 20, status="failed", error_code="TIMEOUT")).success
             fields = ("total_available", "unreserved_available", "classification", "potential_available")
             event_fields = ("previous_available", "new_available", "classification")
-            print(json.dumps({"observations": [{k: r[k] for k in fields} for r in history.history("202710", "17582")],
+            print(json.dumps({"observations": [dict({k: r[k] for k in fields},
+                                                  observation_uuid=expected_uuids[r["check_id"]])
+                                              for r in history.history("202710", "17582")],
                               "events": [{k: r[k] for k in event_fields} for r in history.opening_events("202710", "17582")],
                               "checks": history.statistics()["completed_checks"]}))
     finally:

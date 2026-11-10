@@ -1,4 +1,4 @@
-// Offline prototype. Only this fixed, authenticated ingestion route exists.
+// Direct D1 receipt + chronological projection. No background tasks or outbound fetches.
 const MAX_BYTES = 64 * 1024;
 const MAX_OBSERVATIONS = 50;
 const TOO_LARGE = Symbol("too_large");
@@ -117,6 +117,20 @@ async function readBody(request) {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
+async function observationUUID(checkId, term, crn) {
+  // RFC 9562 UUID5: the immutable check UUID is the namespace, course is the name.
+  // Identity is independent of counts, arrival order, row IDs and retries.
+  const namespace = Uint8Array.from(checkId.replaceAll("-", "").match(/../g), (s) => parseInt(s, 16));
+  const name = new TextEncoder().encode(`${term}:${crn}`);
+  const bytes = new Uint8Array(16 + name.length);
+  bytes.set(namespace); bytes.set(name, 16);
+  const uuid = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes)).slice(0, 16);
+  uuid[6] = (uuid[6] & 15) | 0x50;
+  uuid[8] = (uuid[8] & 63) | 0x80;
+  const hex = [...uuid].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -139,25 +153,33 @@ export default {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
     const hash = [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, "0")).join("");
     try {
+      const identified = await Promise.all(rows.map(async (row) => [await observationUUID(id, row[0], row[4]), ...row]));
       const statements = [env.DB.prepare(`INSERT INTO checks
-        (check_id, executed_at_utc, status, duration_seconds, error_code, request_hash)
-        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(check_id) DO UPDATE SET request_hash=excluded.request_hash`)
+        (check_id, executed_at_utc, status, duration_seconds, error_code, request_hash, received_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%f000+00:00', 'now'))
+        ON CONFLICT(check_id) DO UPDATE SET request_hash=excluded.request_hash`)
         .bind(id, stamp, status, duration, error, hash)];
-      for (const row of rows) {
-        statements.push(env.DB.prepare(`INSERT INTO observations
-          (check_id, term, subject, course_number, section, crn, total_available,
-           unreserved_available, reserved_summary_json, observed_at_utc, classification, potential_available)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-          WHERE NOT EXISTS (SELECT 1 FROM observations WHERE check_id=? AND term=? AND crn=?)`)
-          .bind(id, ...row.slice(0, 8), stamp, row[8], row[9], id, row[0], row[4]));
-      }
+      // One bounded JSON rowset avoids 51 statements at the 50-course input cap.
+      // Two statements and ten bound parameters total, including an empty failure.
+      statements.push(env.DB.prepare(`INSERT INTO observations
+        (check_id, term, subject, course_number, section, crn, total_available,
+         unreserved_available, reserved_summary_json, observed_at_utc, classification,
+         potential_available, observation_uuid)
+        SELECT ?, json_extract(r.value, '$[1]'), json_extract(r.value, '$[2]'),
+          json_extract(r.value, '$[3]'), json_extract(r.value, '$[4]'), json_extract(r.value, '$[5]'),
+          json_extract(r.value, '$[6]'), json_extract(r.value, '$[7]'), json_extract(r.value, '$[8]'),
+          ?, json_extract(r.value, '$[9]'), json_extract(r.value, '$[10]'), json_extract(r.value, '$[0]')
+        FROM json_each(?) r
+        WHERE NOT EXISTS (SELECT 1 FROM observations
+          WHERE check_id=? AND term=json_extract(r.value, '$[1]') AND crn=json_extract(r.value, '$[5]'))`)
+        .bind(id, stamp, JSON.stringify(identified), id));
       // D1 batch is a single transaction; triggers compare/detect within its write lock.
       const results = await env.DB.batch(statements);
       if (results.some((r) => !r.success)) throw new Error("BATCH_FAILED");
       return response(200, "INGESTED", { check_id: id });
     } catch (exc) {
       // Never log request bodies, authorization, raw exceptions, or SQL.
-      const conflict = /IDEMPOTENCY_CONFLICT|OBSERVATION_ORDER|COURSE_IDENTITY/.test(String(exc?.message));
+      const conflict = /IDEMPOTENCY_CONFLICT|OBSERVATION_TIME_CONFLICT|COURSE_IDENTITY/.test(String(exc?.message));
       console.warn(conflict ? "history_ingestion_conflict" : "history_ingestion_unavailable");
       return response(conflict ? 409 : 503, conflict ? "CONFLICT" : "UNAVAILABLE");
     }

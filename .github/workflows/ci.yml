@@ -46,3 +46,9 @@ jobs:
         run: npm test --prefix cloudflare
         env:
           CLOUDFLARE_SEND_METRICS: 'false'
+      - name: Check Worker JavaScript syntax
+        run: node --check cloudflare/src/worker.js && node --check cloudflare/test/worker.test.js && node --check cloudflare/demo_timeline.js
+      - name: Run synthetic direct D1 ingestion demo
+        run: npm run demo --prefix cloudflare
+        env:
+          CLOUDFLARE_SEND_METRICS: 'false'

@@ -23,13 +23,17 @@ The project currently performs read-only periodic checks with targeted iPhone al
 - [x] Queries for sampled openings per day and monitoring success rate
 - [x] Authenticated Worker/D1 ingestion; staging validation reported by operator
 - [x] Offline disk-backed ordered outbox, immutable retries and crash/restart tests
-- [ ] Provide durable source storage and a reviewed structured producer handoff before production ingestion
+- [x] Offline Cloudflare-first atomic ingestion with immutable UUIDs and chronological delayed-sample repair
+- [ ] Review and deploy schema/Worker together to staging, measure quotas and validate rollback
+- [ ] Add a reviewed structured producer handoff, with explicit reporting of unconfirmed capture and pre-Cloudflare data-loss risk
 - [ ] Independently review and activate historical delivery, without changing monitoring or Bark
 - [ ] Measure observed availability duration with explicit sampling/gap semantics
 - [ ] Add retention limits and avoid persisting student information
 
-See [historical reliability](HISTORY_RELIABILITY.md) for implementation scope and
-remaining data-loss risks. Caches/artifacts are not durable source storage.
+See [Cloudflare-first history](CLOUDFLARE_DURABLE_HISTORY.md) for the current
+implementation and remaining data-loss risks. Caches/artifacts are not durable
+source storage; stronger capture through Cloudflare outages would need an
+independent durable source.
 
 ## Phase 4 — Demonstration and maintainability
 

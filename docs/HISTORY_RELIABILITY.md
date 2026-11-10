@@ -1,5 +1,12 @@
 # Historical capture and ordered retries
 
+> **Optional POSIX outbox; earlier milestone.** The selected architecture is now
+> [Cloudflare-first direct durable ingestion](CLOUDFLARE_DURABLE_HISTORY.md), which
+> needs no persistent Linux host. The source-storage requirement and strict D1
+> ordering described below apply to the earlier design, not the current direct
+> path. This outbox still requires surviving POSIX disk and retains its stricter
+> local frontier rules. Its library and recovery tests remain available.
+
 This milestone implements **offline reliability components**, on
 `reliability/ordered-history-outbox`, based on main commit `47fd95b`. It does not
 connect production monitoring. The operator reports that authenticated staging

@@ -13,7 +13,9 @@ import uuid
 
 import requests
 
-from cloud_history import CloudHistoryClient, PreparedCheck, persist_best_effort, prepare_check
+from cloud_history import (
+    CloudHistoryClient, PreparedCheck, capture_completed_best_effort, persist_best_effort, prepare_check,
+)
 import monitor
 from seat_history import CourseObservation
 
@@ -220,6 +222,64 @@ class CloudClientTests(unittest.TestCase):
             contents = (root / path).read_text()
             self.assertNotIn("cloud_history", contents)
             self.assertNotIn("GMU_HISTORY", contents)
+
+    def test_completed_capture_reports_only_matching_durable_acknowledgement(self):
+        self.session.post.return_value = self.reply()
+        result = capture_completed_best_effort(
+            self.client, self.check_id, self.start, .25, [self.course])
+        self.assertEqual((result.success, result.code, result.attempts), (True, "INGESTED", 1))
+        self.assertEqual(self.session.post.call_args.kwargs["data"], self.prepared.body)
+
+    def test_completed_capture_preparation_failure_is_isolated_and_redacted(self):
+        with self.assertLogs("cloud_history") as logs:
+            result = capture_completed_best_effort(
+                self.client, self.check_id, self.start, .25,
+                [replace(self.course, reserved_summary={"studentName": TOKEN})])
+        self.assertEqual((result.success, result.code, result.attempts), (False, "CAPTURE_PREPARATION_FAILED", 0))
+        self.assertNotIn(TOKEN, "".join(logs.output))
+        self.session.post.assert_not_called()
+
+    def test_completed_capture_exhausted_retries_report_unconfirmed_and_keep_identity(self):
+        # A timeout is deliberately not reported as proof that D1 has no record.
+        self.session.post.side_effect = requests.Timeout(TOKEN)
+        with self.assertLogs("cloud_history") as logs:
+            result = capture_completed_best_effort(
+                self.client, self.check_id, self.start, .25, [self.course])
+        self.assertEqual((result.success, result.code, result.attempts), (False, "TIMEOUT", 3))
+        self.assertIn("Historical capture unconfirmed", "".join(logs.output))
+        self.assertNotIn(TOKEN, "".join(logs.output))
+        self.assertTrue(all(c.kwargs["data"] == self.prepared.body for c in self.session.post.call_args_list))
+        # Later retry uses original completed facts, without refetching anything.
+        self.session.post.side_effect = None
+        self.session.post.return_value = self.reply()
+        self.assertTrue(capture_completed_best_effort(
+            self.client, self.check_id, self.start, .25, [self.course]).success)
+        self.assertEqual(self.session.post.call_args.kwargs["data"], self.prepared.body)
+
+    def test_completed_capture_disabled_does_no_preparation_or_network(self):
+        with patch("cloud_history.prepare_check", side_effect=AssertionError("must not prepare")):
+            self.assertEqual(capture_completed_best_effort(None).code, "DISABLED")
+        self.session.post.assert_not_called()
+
+    def test_completed_capture_errors_preserve_monitoring_and_notification_results(self):
+        state = {"17582": {"seatsAvailable": 0, "reservedSeatSummary": "0 of 10 unreserved"}}
+        current = {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved"}
+        self.session.post.side_effect = [self.reply(503), self.reply(503), self.reply(503)]
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304"}}),
+              patch.object(monitor, "get_section", return_value=current) as fetch,
+              patch.object(monitor, "notify", return_value=True) as notify,
+              patch.object(monitor, "save_state"), patch.object(monitor.time, "sleep"),
+              patch("requests.sessions.Session.request", side_effect=AssertionError("external network forbidden")),
+              contextlib.redirect_stdout(io.StringIO())):
+            monitoring_result = monitor.check_once("202710", state)
+            with self.assertLogs("cloud_history"):
+                history = capture_completed_best_effort(self.client, self.check_id, self.start, .25, [self.course])
+            self.assertEqual(monitoring_result, 0)
+            self.assertFalse(history.success)
+            self.assertEqual(monitor.check_once("202710", state), monitoring_result)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(notify.call_count, 1)
+        self.assertEqual(self.session.post.call_count, 3)
 
 
 if __name__ == "__main__":

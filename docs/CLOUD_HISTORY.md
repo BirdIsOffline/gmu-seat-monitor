@@ -1,5 +1,12 @@
 # Cloud persistence — Phase 3, Part 2A
 
+> **Historical 0001 protocol/design notes.** The current architecture is
+> [Cloudflare-first durable history](CLOUDFLARE_DURABLE_HISTORY.md). Migration 0002
+> replaces strict append ordering with a chronological timeline that accepts
+> delayed observations. Its direct path needs no persistent Linux host or inbox.
+> The schema, ordering and activation recommendations below describe the earlier
+> milestone and are superseded by that guide; the HTTP protocol stays compatible.
+
 The initial **offline-tested integration prototype** from
 `phase3-cloud-persistence` is merged into main. The operator reports a deployed
 authenticated staging Worker/D1 and verified remote synthetic ingestion and
@@ -11,11 +18,10 @@ for development. Production `monitor.py`,
 and Bark decisions are unchanged. No production entry point imports the client.
 Setting environment variables alone does not connect the production monitor.
 
-The next milestone adds a standalone disk-backed ordered outbox. Read
-[historical reliability](HISTORY_RELIABILITY.md) for the current design, durable
-storage requirements, failure behavior, quotas and recovery procedure. Direct
-client calls below remain best-effort; this document primarily describes the
-existing ingestion protocol and initial prototype validation.
+The subsequent POSIX outbox milestone is documented in
+[historical reliability](HISTORY_RELIABILITY.md). It remains optional library
+functionality. This document records the initial ingestion protocol and prototype
+validation; use the current Cloudflare-first guide for deployment decisions.
 
 ## Architecture
 
