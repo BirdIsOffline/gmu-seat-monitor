@@ -12,7 +12,8 @@ An optional separate Cloudflare Worker renders a self-contained historical dashb
 
 ## Dashboard behavior
 
-- Switch between 24-hour and 7-day windows. Displays selected-window check success rate, latest reported total seat counts, time-series line charts for both CRNs, latest classifications/unreserved status, sampled opening events and a caveat about missing scheduled runs.
+- Switch between 24-hour and 7-day windows. Displays selected-window check success rate, latest reported total seat counts, time-series line charts for both CRNs, latest classifications/unreserved status, sampled opening events and recorded-check cadence metrics.
+- Cadence metrics use `LAG` on *stored checks inside the selected time window*: measured interval count, average/longest interval, and counts over 10 or 15 minutes. They cannot detect missing triggers before the first stored check, after the most recent check, or determine that every scheduled trigger ran. They measure recorded-history spacing, **not uptime or delivery guarantee**.
 - Unknown unreserved seats are rendered as `Unknown`, never zero or eligible. `total_available=3` for IT 341 does **not** prove 3 unreserved seats exist.
 - Chart segments break if consecutive observations are more than 15 minutes apart. Time shown in the user's browser local timezone, marked as local in the data table header.
 - Token is not stored in localStorage, sessionStorage, cookies or URLs. Reload requires reentry.
