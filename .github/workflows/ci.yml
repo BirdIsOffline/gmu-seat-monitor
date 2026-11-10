@@ -50,6 +50,8 @@ jobs:
           CLOUDFLARE_SEND_METRICS: 'false'
       - name: Check Worker JavaScript syntax
         run: node --check cloudflare/src/worker.js && node --check cloudflare/test/worker.test.js && node --check cloudflare/demo_timeline.js
+      - name: Check isolated dashboard Worker syntax and run offline tests
+        run: node --check dashboard/worker.js && node --test dashboard/worker.test.mjs
       - name: Run synthetic direct D1 ingestion demo
         run: npm run demo --prefix cloudflare
         env:
