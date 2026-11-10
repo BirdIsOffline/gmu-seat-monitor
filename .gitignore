@@ -15,10 +15,27 @@ __pycache__/
 *.sqlite-*
 *.sqlite3
 *.sqlite3-*
-# Historical outbox owner locks (never unlink one while a process holds it).
-*.db.lock
-*.sqlite.lock
-*.sqlite3.lock
+# Replay databases retain the original SQLite extension.
+*.db.replay
+*.sqlite.replay
+*.sqlite3.replay
+# SQLite backups and owner locks, including replay/backup filename variants.
+# Match data suffixes explicitly so files such as schema.db.sql stay visible.
+*.db*.bak
+*.sqlite*.bak
+*.db*.backup
+*.sqlite*.backup
+*.db*.lock
+*.sqlite*.lock
+# SQLite sidecars also follow replay and backup filenames.
+*.db*-journal
+*.db*-wal
+*.db*-shm
+*.sqlite*-journal
+*.sqlite*-wal
+*.sqlite*-shm
+# Optional canonical payload export from the recovery example, at repo root.
+/prepared.json
 # Offline Cloudflare tooling, local bindings, and secrets
 node_modules/
 .wrangler/

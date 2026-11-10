@@ -173,6 +173,13 @@ All examples use a new local directory; **do not run them against staging**.
 requires explicit client configuration; an unset `GMU_HISTORY_ENABLED` returns
 `DISABLED` without attempting a submission. Only tests use loopback HTTP.
 
+Keep generated payloads and database backups outside the checkout. If stored
+locally, retain the SQLite extension in replay/backup names (for example
+`outbox.sqlite3.replay` or `outbox.sqlite3.replay.backup`), and end backups with
+`.bak` or `.backup`. Git ignores these databases, locks and SQLite sidecars,
+plus the example's root-level `prepared.json` export. Arbitrarily renamed exports
+are not automatically protected; review staged files before committing.
+
 ```bash
 mkdir -m 700 /tmp/gmu-history-example
 python history_outbox.py --db /tmp/gmu-history-example/outbox.sqlite3 init
