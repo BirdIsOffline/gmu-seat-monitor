@@ -1,112 +1,129 @@
-Campus Seat Watch — GMU Course Availability Monitor
-![Python CI]
-A read-only Python automation project that checks published university course availability and sends an iPhone push alert when potentially eligible seats increase. Built as a practical systems-integration project using Python, HTTP/JSON APIs, GitHub Actions, an external scheduler, and Bark notifications.
-> **Status:** Working personal prototype. This is **not** a registration bot, does not log into a student account, and cannot guarantee seat eligibility or availability. The published seat search is institution-specific; only run automated checks with the institution's permission.
-Why I built it
-High-demand classes can fill quickly. The challenge is distinguishing general-availability seats from reserved seats, then alerting only when an opening might actually help. The project turns public course-search responses into an automated, low-noise notification workflow.
-Architecture
+# Campus Seat Watch
+**Read-only university course availability monitoring, historical analytics and iPhone notifications**
+
+> **Independent student engineering project · Python · GitHub Actions · Cloudflare Workers/D1 · JavaScript · SQLite · HTTP/JSON**
+
+Campus Seat Watch is a deployed, read-only course availability monitoring system. An external scheduler dispatches a GitHub Actions workflow, which checks the public course catalog for two explicitly configured sections, parses reservation information, compares observed seat availability with the previous snapshot, and sends a Bark notification to an iPhone **only when potentially available seats increase**. A separate, authenticated Cloudflare Worker stores public section-level observations in D1; a second, token-protected Worker presents historical charts, last-check freshness and interval metrics.
+
+The current live configuration targets **George Mason University Spring 2027**: IT 304 DL1 (CRN 17582) and IT 341 DL1 (CRN 17593). This is **not a registration bot**: no student login, authentication bypass, automatic enrollment, add/drop/swap, or access to personal student records. A positive total seat count does **not** guarantee unreserved eligibility. The project is not affiliated with or endorsed by GMU. Automated access requires institutional permission; do not enable or change polling without confirming authorization.
+
+## What it does
+
+- **Exact course matching:** resolves the requested semester from the published catalog and verifies the subject, course number, section and CRN.
+- **Conservative alerting:** distinguishes known unreserved seats from reserved-only seats; a missing reservation summary is explicitly treated as *possible* availability, not guaranteed eligibility. Sends a notification for a positive change in potentially available seats and suppresses no-change, decrease and reserved-only events.
+- **Serverless operations:** a separately configured five-minute dispatch schedule initiates GitHub Actions runs; the runner keeps a public-only previous snapshot in a GitHub Actions cache. Test workflows never make GMU requests.
+- **Durable historical records:** an authenticated ingestion Worker atomically stores immutable, public section-level check and observation records in Cloudflare D1, with chronological opening-event logic. History submission is isolated from monitoring success and Bark decision logic.
+- **Private analytics dashboard:** an independent read-only Worker queries fixed, parameterized D1 SELECT statements, offers 24-hour and 7-day charts, check-success/cadence metrics, last-recorded-check freshness, and an explicit refresh control. History API requests require a **separate** read-token secret.
+- **Automated verification:** Python unit/integration tests and Worker tests run in GitHub Actions CI, using mocked endpoints and synthetic data.
+
+## System design
+
 ```text
-External scheduler (cron-job.org; configured separately)
-     |
-     | GitHub workflow_dispatch request (scoped API token)
-     v
-GitHub Actions: seat-monitor.yml
-     |
-     | Python monitor.py --once
-     v
-Public GMU course-search API (HTTP/JSON)
-     |
-     v
-Parse reserved vs. unreserved seats
-     |
-     v
-Compare with last saved public-data snapshot (GitHub Actions cache)
-     |
-     +-- No eligible-seat increase --> No phone alert
-     |
-     +-- Potentially eligible increase --> Bark API --> iPhone alert
+External scheduler (separately configured; best-effort)
+      |
+      | scoped GitHub workflow_dispatch, mode=check
+      v
+GitHub Actions check-seats job
+      |
+      +--> Python catalog adapter --> public course JSON (read-only)
+      |             |
+      |             v
+      |      exact section/CRN match
+      |             |
+      |             v
+      |      reservation parsing + previous-snapshot comparison
+      |             |
+      |             +--> candidate seat increase --> Bark push --> iPhone
+      |             |
+      |             +--> public-only current snapshot --> Actions cache
+      |
+      +--> independent history capture/submit (explicitly enabled)
+                    |
+                    v
+          authenticated ingestion Worker
+                    |
+                    v
+               Cloudflare D1
+                    |
+                    v
+        separate token-protected dashboard Worker
+                    |
+                    v
+         browser charts + monitoring freshness
 ```
-A separate Python CI workflow runs offline tests whenever source code is pushed or a pull request is opened. CI does not contact GMU or send live phone notifications.
-Technical highlights
-Precise matching: validates the Spring 2027 term, subject, course number, section, and CRN.
-Reserved-seat filtering: alerts for increased unreserved availability, not extra reserved-only seats.
-Stateful change detection: compares public course snapshots between scheduled workflow runs.
-Noisy-event suppression: ignores instructor changes, falling seat counts, and ordinary no-change checks.
-Secure configuration: reads the Bark key from `BARK_DEVICE_KEY` in GitHub Actions Secrets (or from a local, gitignored file).
-Automated testing: offline unit tests cover seat parsing, notification conditions, state persistence, health reporting, SQLite history, and mocked integration boundaries.
-Notification behavior
-Change observed	Sends an opening alert?
-Unreserved seats: 0 → 1	Yes
-Unreserved seats: 1 → 2	Yes
-Only reserved seats: 9 → 10	No
-Available unreserved seats: 1 → 0	No
-Reserved capacity is released into unreserved availability	Yes, if the response reflects it
-Instructor details or unrelated data change	No
-No relevant change	No
-Important: When reservation data is missing entirely, the monitor may flag total visible seats as potentially available. Always verify eligibility and availability in Patriot Web before changing a registration. Monitoring checks are not instantaneous, so brief openings may be missed.
-Local quick start
-Python 3.12+ is recommended. From the repository folder:
+
+No enrollment requests are issued. The dashboard only reads stored records; it does not invoke GMU searches, Bark, the ingest endpoint, or scheduled workflows.
+
+## Verified operational snapshot
+
+**Observed on November 10, 2026 (not a long-term SLA):** 182 stored checks / 364 course observations, 100% success **among stored checks**, a measured average interval of 5.00 minutes, a longest recorded gap of 5.28 minutes, and zero recorded gaps above 10 minutes. Both courses were present. A real Bark **test** arrived on the operator's iPhone, and an independent live monitoring run reported 2/2 successful checks with acknowledged historical ingestion. This evidence does not establish that every scheduled trigger ran, that Bark would deliver every future alert, or that a real seat-opening alert has occurred. The dashboard will show different live counts as monitoring continues.
+
+The seat-history charts have captured a **total seat count change** for IT 341 from 3 to 2; unreserved availability remained unknown. No qualifying historical opening event was reported at the time of that snapshot.
+
+## Quick offline demonstration
+
+Run locally with Python 3.12+:
+
 ```bash
 python -m pip install -r requirements.txt
 python monitor.py --demo
+python demo_history.py
+python demo_live_history.py
 python -m unittest discover -s tests -v
 ```
-The demo and test suite do not contact GMU or Bark.
 
-SQLite historical seat tracking (Phase 3, Part 1) is available as a separate,
-offline module. Run `python demo_history.py` for a temporary synthetic database,
-historical queries, and opening-event statistics. It does not change production
-monitoring or persist data between Actions runs. See [SQLite history documentation](docs/SQLITE_HISTORY.md)
-for the schema, API, privacy rules, and proposed future persistence architecture.
-To perform one live, read-only check only if authorized:
+The demos use synthetic course observations and/or mocked HTTP interactions; **they make no requests to GMU or Bark and cannot change enrollment**. The test suite is likewise offline. To run the dashboard's Node tests:
+
 ```bash
-python monitor.py --once
+node --check dashboard/worker.js
+node --test dashboard/worker.test.mjs
 ```
-For Bark configuration, `python setup_bark.py` stores a device key in the local ignored `bark_key.txt` file. Never commit that file or paste its contents into issues, logs, or screenshots.
-Deployment
-The operational workflow is `.github/workflows/seat-monitor.yml`. It is triggered by the external scheduler using `workflow_dispatch`, with input `mode: check`. The Bark key is a GitHub Actions repository secret named `BARK_DEVICE_KEY`, and authorization for polling is controlled by `GMU_POLLING_APPROVED`.
-The external scheduler, token, and action secrets are not contained in this public repository. Scheduled triggers are best-effort and can be delayed or fail; inspect run logs regularly. Read CLOUD_SETUP.md for setup, restrictions, and troubleshooting.
-Project files
-File	Purpose
-`monitor.py`	Public course lookup, seat parsing, change detection, Bark alerts
-`setup_bark.py`	Configure local notification delivery
-`.github/workflows/seat-monitor.yml`	Operational cloud seat checks
-`.github/workflows/ci.yml`	Automated tests on code changes
-`tests/test_monitor.py`	Offline regression tests and mocked integration tests
-`docs/ARCHITECTURE.md`	Components, data flow, design decisions, limitations
-`docs/ROADMAP.md`	Planned engineering improvements
-Design tradeoffs and limitations
-A possible opening is not an enrollment guarantee; eligibility may depend on rules the public search does not disclose.
-Cloud scheduled jobs are periodic, not continuously connected. An opening can appear and disappear between checks.
-A cached snapshot can be evicted. On a cold start, the bot may send a one-time opening notification if seats are already available.
-The external scheduler needs an appropriately scoped GitHub token and is an additional point of failure.
-The system intentionally does not authenticate to Patriot Web, bypass reserved seating, or add/drop classes.
-See architecture notes and planned improvements.
-Technologies
-Python · `requests` · JSON · REST-style HTTP APIs · GitHub Actions · cron-job.org · Bark · `unittest` / `unittest.mock`
-Note: This is an independent student project; it is not affiliated with or endorsed by George Mason University.
 
-## Offline cloud history prototype
+An optional fully synthetic Worker/D1 demo is documented in [Cloudflare durable-history architecture](docs/CLOUDFLARE_DURABLE_HISTORY.md). The real dashboard is private and should not be presented as anonymously accessible; show screenshots with secrets and account details hidden, or use the offline demonstration.
 
-Phase 3 Part 2A adds a disabled-by-default Python ingestion client and a local
-Cloudflare Worker/D1 prototype. Production monitoring and Bark are unchanged.
-See [cloud persistence architecture, security, and offline testing](docs/CLOUD_HISTORY.md).
+## Deployment and security
 
-The current reliability milestone implements **Cloudflare-first direct durable
-ingestion**: one D1 transaction stores immutable UUID observations and maintains
-chronological historical openings, including delayed and concurrent arrivals.
-It needs no persistent Linux host, inbox or scheduled processor. Production
-recording remains disabled. A default-off structured handoff now captures original
-completed public lookups and submits immutable bodies in a separate process with
-a hard deadline. See [adapter configuration, offline tests and activation steps](docs/LIVE_HISTORY_ADAPTER.md).
-Synthetic staging is separate from the eventual dedicated production target.
-Facts lost before reaching Cloudflare cannot be recovered
-by D1. See [architecture, migration, staging/rollback and operations](docs/CLOUDFLARE_DURABLE_HISTORY.md).
-Run `CLOUDFLARE_SEND_METRICS=false npm run demo --prefix cloudflare` after installing
-the existing locked development dependencies for a disposable synthetic D1 demo.
+- Production monitoring workflow: [`.github/workflows/seat-monitor.yml`](.github/workflows/seat-monitor.yml); separate CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+- Monitoring requires explicit approval through `GMU_POLLING_APPROVED`; the external scheduler and GitHub dispatch token are configured outside this repository.
+- Bark device key: `BARK_DEVICE_KEY` GitHub Actions **secret**.
+- History ingestion: dedicated Worker, D1 binding, opt-in variables and ingestion credentials described in [live history adapter](docs/LIVE_HISTORY_ADAPTER.md). Do not copy ingestion credentials to the dashboard.
+- Dashboard: separate `gmu-seat-history-dashboard` Worker, D1 binding `DB`, and the **separate** `DASHBOARD_READ_TOKEN` secret. See [dashboard deployment and rollback](dashboard/DEPLOYMENT.md).
+- Never commit device keys, access tokens, cookies, student identifiers or enrollment information. See [security guidance](SECURITY.md).
 
-The optional [SQLite outbox](docs/HISTORY_RELIABILITY.md) remains available for a
-surviving POSIX filesystem, with its original strict local ordering policy.
+**Current manual deployment caveat:** updating GitHub code does **not** automatically redeploy the Cloudflare dashboard. Deploy Worker revisions separately, verify them and preserve the existing ingestion Worker.
 
-Run `python demo_live_history.py` for a temporary synthetic partial-check handoff,
-lost-acknowledgement retry and separate delivery outcomes. It makes no requests.
+## What happens after registration ends?
+
+The currently deployed monitor is **intentionally semester-specific**. The string `Spring 2027`, both CRNs and dashboard course labels are presently hardcoded; they do **not** roll over automatically. A new term may have new CRNs, and old course matches can stop resolving. **Do not leave scheduled polling indefinitely enabled after it is no longer needed** or simply swap CRNs without verifying authorization, accurate matching and state isolation. Historic data is stored with `term` and `crn` so it can remain available, but the current dashboard displays only the configured pair.
+
+Follow the [term rollover / archive checklist](docs/TERM_LIFECYCLE.md) for a safe manual pause, archived demo, new-term configuration plan and independent verification. An automatic term-switcher is **not** implemented. Archived public section-level data and synthetic demos provide lasting portfolio evidence without continued GMU traffic.
+
+## Engineering tradeoffs and limitations
+
+| Design choice | Benefit | Limitation |
+|---|---|---|
+| GitHub Actions + external dispatch | Hosted automation with no persistent app server | Jobs/dispatches are best-effort; gaps between stored checks cannot prove every trigger ran |
+| Cached last snapshot | Simple change detection across ephemeral runners | Cache eviction can lose previous state and cause a one-time repeat candidate alert |
+| Separate historical ingestion | Keeps monitoring/Bark independent of D1 availability | Original observations may be lost if the ephemeral runner is interrupted before durable submission; an offline disk outbox does not fix this on a short-lived runner |
+| D1 transaction + timeline logic | Durable public observations, deterministic chronological event maintenance | Ingestion doesn't guarantee every scheduled check is captured |
+| Read token + fixed queries | Private read API and bounded request shapes | D1 binding itself is not a database-enforced read-only role; access limits and token rotation need operational care |
+| Five-minute sampled observations | Useful long-running trends | Short-lived seat openings between checks can be missed |
+| Explicit unreserved parsing | Avoids reserved-only false positives | Catalog information may be incomplete; eligibility always requires official registration confirmation |
+
+## Explore the code
+
+| Path | Purpose |
+|---|---|
+| [`monitor.py`](monitor.py) | GMU catalog lookup, seat classification, change detection, Bark delivery and offline demo |
+| [`health_runner.py`](health_runner.py) | Monitoring health report |
+| [`cloud_history.py`](cloud_history.py) | Public-only history payload validation |
+| [`history_capture.py`](history_capture.py), [`history_submit.py`](history_submit.py) | Bounded, isolated historical handoff |
+| [`cloudflare/`](cloudflare/) | Ingest Worker, migrations and offline tests |
+| [`dashboard/worker.js`](dashboard/worker.js) | Private read-only dashboard Worker |
+| [`tests/`](tests/) | Offline Python tests, mocked network and failure-path checks |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Component design and engineering decisions |
+| [`docs/TERM_LIFECYCLE.md`](docs/TERM_LIFECYCLE.md) | Safe semester transition and archival process |
+
+## Project scope
+
+This project observes **published, section-level data** and sends informational alerts for potential openings. It **does not** register a student, provide enrollment guarantees, bypass restrictions or replace official GMU guidance. It remains an independent student-built portfolio project.
