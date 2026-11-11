@@ -21,7 +21,7 @@ button{background:#255fdb;color:white;border:0;padding:11px 16px;cursor:pointer}
 .key{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#aeb9ce}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:#6bc7ff}
 .dot.second{background:#fbbf74}.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
 table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td{padding:11px 7px;border-bottom:1px solid #26334a}th{color:#aeb9ce;font-weight:600}
-.note{color:#c6d1df;font-size:.85rem;line-height:1.5}.scroll{overflow-x:auto}
+.note{color:#c6d1df;font-size:.85rem;line-height:1.5}.scroll{overflow-x:auto}#freshnessState{font-weight:750}#freshnessState.healthy{color:#7addaa}#freshnessState.delayed{color:#ffcd78}#freshnessState.stale{color:#ff9992}#freshnessState.unknown{color:#bac7dc}
 @media(max-width:700px){.metrics,.cadence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px 14px 45px}canvas{height:240px}table{font-size:.75rem}}
 </style>
 </head>
@@ -37,7 +37,14 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Recorded check success</div><strong id="rate">—</strong></div>
 <div class="metric"><div class="label">IT 304 · Total seats</div><strong id="it304">—</strong></div>
 <div class="metric"><div class="label">IT 341 · Total seats</div><strong id="it341">—</strong></div></section>
-<section class="panel" style="margin-top:18px" aria-label="Recorded check cadence">
+<section class="panel" style="margin-top:18px" aria-label="Stored history freshness">
+<h2>Latest stored check · <span id="freshnessState" class="unknown" aria-live="polite">Not checked</span></h2>
+<p id="freshnessAge" class="note">Load history to see the latest recorded check.</p>
+<p id="freshnessTime" class="note"></p>
+<button type="button" id="refreshHistory">Refresh history</button>
+<p class="note">Freshness describes the most recent check saved to D1: Healthy at 10 minutes or less, Delayed above 10 through 15 minutes, Stale above 15 minutes. Status ages on-screen but new records load only when you click Refresh history or change the time range. It does not verify scheduled triggers or Bark delivery.</p>
+</section>
+<section class="panel" aria-label="Recorded check cadence">
 <h2>Recorded check cadence</h2>
 <div class="cadence-grid">
 <div class="metric"><div class="label">Measured intervals</div><strong id="gapIntervals">—</strong></div>
@@ -59,16 +66,31 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 let readToken = '';
 let activeRange = '24h';
 let samples = [];
+let freshnessSnapshot = null;
+let freshnessUpdatedAt = 0;
 function byId(id){return document.getElementById(id)}
 function pretty(v){return v === null || v === undefined ? 'Unknown' : String(v)}
 function fmtTime(value){if(!value)return '—';const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString():value}
 function row(cells){const tr=document.createElement('tr');for(const s of cells){const td=document.createElement('td');td.textContent=s;tr.appendChild(td)}return tr}
 function setStatus(s,error){const el=byId('status');el.textContent=s;el.setAttribute('role',error?'alert':'status')}
+function paintFreshness(){
+ if(!freshnessSnapshot)return;
+ const initial=freshnessSnapshot.age_minutes;
+ const age=initial===null?null:Math.max(0,initial+(performance.now()-freshnessUpdatedAt)/60000);
+ const state=freshnessSnapshot.state==='clock_error'?'clock_error':age===null?'no_data':age<=10?'healthy':age<=15?'delayed':'stale';
+ const text=state==='healthy'?'Healthy':state==='delayed'?'Delayed':state==='stale'?'Stale':state==='clock_error'?'Clock issue':'No records';
+ const el=byId('freshnessState');el.textContent=text;el.className=state==='healthy'?'healthy':state==='delayed'?'delayed':state==='stale'?'stale':'unknown';
+ byId('freshnessAge').textContent=age===null?(state==='clock_error'?'Stored timestamp is invalid or too far in the future.':'No stored checks found.'):'Last loaded check is '+age.toFixed(1)+' minutes old.';
+}
 async function load(){
  setStatus('Loading recorded samples...',false);
  const resp=await fetch('/api/dashboard?range='+encodeURIComponent(activeRange),{headers:{Authorization:'Bearer '+readToken},cache:'no-store'});
  if(!resp.ok){throw new Error(resp.status===401?'Invalid dashboard read token.':'Dashboard data is unavailable ('+resp.status+').')}
  const data=await resp.json();samples=data.samples;
+ freshnessSnapshot=data.freshness;
+ freshnessUpdatedAt=performance.now();
+ byId('freshnessTime').textContent='Last stored check: '+fmtTime(data.health.latest_overall)+'. Snapshot retrieved: '+fmtTime(data.generated_at_utc)+'.';
+ paintFreshness();
  byId('checks').textContent=data.health.total;
  byId('rate').textContent=data.health.total?((100*data.health.success/data.health.total).toFixed(1)+'%'):'—';
  const gaps=data.cadence;
@@ -120,6 +142,10 @@ for(const btn of document.querySelectorAll('button[data-range]'))btn.addEventLis
  activeRange=btn.dataset.range;for(const b of document.querySelectorAll('button[data-range]'))b.setAttribute('aria-pressed',String(b===btn));
  try{await load()}catch(err){setStatus(err.message,true)}
 });
+byId('refreshHistory').addEventListener('click',async()=>{
+ try{await load()}catch(err){setStatus(err.message,true)}
+});
+setInterval(paintFreshness,60000);
 window.addEventListener('resize',()=>{if(!byId('dashboard').hidden)drawChart()});
 </script>
 </body></html>`;
@@ -145,6 +171,18 @@ function utcCutoff(ms) {
   return new Date(Date.now() - ms).toISOString().replace('Z', '000+00:00');
 }
 
+// Based on server time and the latest stored check across ALL history, not just the selected graph window.
+export function classifyFreshness(latest, atMs) {
+  if (latest === null || latest === undefined) return { state: 'no_data', age_minutes: null };
+  const sampleMs = Date.parse(latest);
+  if (!Number.isFinite(sampleMs) || !Number.isFinite(atMs)) return { state: 'clock_error', age_minutes: null };
+  const age = (atMs - sampleMs) / 60000;
+  if (age < -2) return { state: 'clock_error', age_minutes: null };
+  const minutes = Math.max(0, age);
+  return { state: minutes <= 10 ? 'healthy' : minutes <= 15 ? 'delayed' : 'stale',
+    age_minutes: Math.round(minutes * 100) / 100 };
+}
+
 async function dashboard(db, range) {
   const since = utcCutoff(RANGES[range]);
   // Fixed SQL and bound parameters only. No D1 write statements and no arbitrary SQL endpoint.
@@ -152,7 +190,9 @@ async function dashboard(db, range) {
     db.prepare(`SELECT COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END),0) AS success,
       COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed,
-      MAX(executed_at_utc) AS latest FROM checks WHERE executed_at_utc >= ?`).bind(since).all(),
+      MAX(executed_at_utc) AS latest,
+      (SELECT MAX(executed_at_utc) FROM checks) AS latest_overall
+      FROM checks WHERE executed_at_utc >= ?`).bind(since).all(),
     db.prepare(`SELECT crn, observed_at_utc, total_available, unreserved_available, classification
       FROM observations WHERE crn IN (?, ?) AND observed_at_utc >= ?
       ORDER BY observed_at_utc ASC, crn ASC LIMIT 5000`).bind(...IDS, since).all(),
@@ -175,7 +215,10 @@ async function dashboard(db, range) {
         COALESCE(SUM(CASE WHEN minutes > 15 THEN 1 ELSE 0 END), 0) AS gaps_over_15_minutes
       FROM intervals`).bind(since).all(),
   ]);
-  return { range, health: healthQuery.results[0] ?? { total: 0, success: 0, failed: 0, latest: null },
+  const nowMs = Date.now();
+  const health = healthQuery.results[0] ?? { total: 0, success: 0, failed: 0, latest: null, latest_overall: null };
+  return { range, health, generated_at_utc: new Date(nowMs).toISOString(),
+    freshness: classifyFreshness(health.latest_overall, nowMs),
     samples: sampleQuery.results, events: eventQuery.results,
     cadence: cadenceQuery.results[0] ?? { measured_intervals: 0, average_minutes: null,
       longest_gap_minutes: null, gaps_over_10_minutes: 0, gaps_over_15_minutes: 0 } };
