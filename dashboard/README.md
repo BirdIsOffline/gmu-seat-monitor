@@ -1,14 +1,14 @@
-# Phase 3 historical dashboard — isolated draft, **not deployed**
+# Historical analytics dashboard
 
-An optional separate Cloudflare Worker renders a self-contained historical dashboard and queries the existing D1 tables (`checks`, `observations`, `opening_events`) **read-only**. It does not import or modify the ingestion Worker, monitor, GitHub Actions workflow, Bark notifications, or external scheduler; it creates no GMU traffic. It has no data-writing routes or calls to the production history ingestion endpoint.
+A separately deployed Cloudflare Worker renders a self-contained historical dashboard and queries the existing D1 tables (`checks`, `observations`, `opening_events`) **read-only**. It does not import or modify the ingestion Worker, monitor, GitHub Actions workflow, Bark notifications, or external scheduler; it creates no GMU traffic. It has no data-writing routes or calls to the production history ingestion endpoint.
 
-## Privacy and deployment gates
+## Security and deployment
 
-- **No automatic deployment.** Do not merge or deploy without a separate review, production binding verification, and user authorization.
+- **Independent deployment:** repository updates do not automatically deploy the dashboard Worker. Review source changes and binding configuration before manual deployment.
 - The dashboard uses a **separate** `DASHBOARD_READ_TOKEN` secret, never the history ingestion token. Its HTML is public but history JSON requires this token; the browser holds it only in tab memory and sends it only to same-origin `/api/dashboard` over HTTPS. Do not put the token into source code, GitHub commits, URLs, logs or chat.
 - The D1 binding must be the operator-approved **production** history database, not staging or recovery. Use a separate Worker from `gmu-seat-history-production-worker`. No ingestion routes or credentials are present in this app.
 - Require a trusted HTTPS endpoint before use. For stronger access controls, review Cloudflare Access separately before public deployment. This app does not implement IP rate limits or token rotation; configure them at the edge if exposing publicly.
-- Free-tier capacity, retention and Access availability must be verified for the account. Observe query/CPU usage if deploying. This draft sets no schedule and makes no outbound requests.
+- Free-tier capacity, retention and Access availability must be verified for the account. Observe query/CPU usage if deploying. The dashboard has no independent polling schedule and makes no outbound requests.
 
 ## Dashboard behavior
 
@@ -24,4 +24,4 @@ An optional separate Cloudflare Worker renders a self-contained historical dashb
 
 The Worker source can be checked using `node --check dashboard/worker.js`. The standalone Node tests can be run with `node --test dashboard/worker.test.mjs`. They rely only on mocked D1 results, issue no network requests and do not prove live Cloudflare behavior.
 
-No production Worker deployment configuration or real D1 database ID is committed. Before future activation, provision a separate Workers service with the dashboard source and a D1 `DB` binding pointing to the reviewed production database, set `DASHBOARD_READ_TOKEN` using Cloudflare's secret store, and verify privately against the real schema. Keep monitoring and the ingestion Worker unchanged.
+The dashboard Worker is deployed independently from the repository. Its D1 `DB` binding targets the reviewed history database, and `DASHBOARD_READ_TOKEN` is stored as a Cloudflare secret. No production database ID or credential is committed. Follow [deployment instructions](DEPLOYMENT.md) for configuration and rollback; keep the monitoring and ingestion services separate.

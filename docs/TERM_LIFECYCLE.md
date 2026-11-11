@@ -1,4 +1,4 @@
-# Term lifecycle, safe pause and portfolio archive
+# Term lifecycle and archival
 
 ## Current scope (as deployed November 10, 2026)
 
@@ -15,8 +15,8 @@ The Cloudflare/D1 schema stores a `term` as well as a `crn` per course observati
 1. Stop the *external scheduler's* five-minute GitHub dispatch. Confirm it no longer submits `mode=check`. Do not delete historical databases or Bark configuration.
 2. Independently disable future live checks by setting the GitHub Actions repository variable `GMU_POLLING_APPROVED` to `false` (or disabling the operational workflow). The workflow's `check-seats` job is gated on that variable.
 3. Confirm in GitHub Actions that checks are no longer running and verify D1 still holds the old history. A past run's "success" does not authorize continuing polling.
-4. Save sanitized screenshots: dashboard overview, 24-hour/7-day trend, freshness and cadence, check history; remove tokens, private email, device key, and other account details.
-5. Keep the repo's **offline synthetic** demonstrations as the permanent portfolio experience. The existing `python monitor.py --demo`, `python demo_history.py` and `python demo_live_history.py` do not contact GMU. The synthetic data must be explicitly labeled.
+4. Export or archive relevant operational history as needed, without exposing credentials, personal account details, or student records.
+5. Keep offline synthetic demonstrations available for regression testing after live monitoring stops. `python monitor.py --demo`, `python demo_history.py`, and `python demo_live_history.py` do not contact GMU.
 6. For privacy/cost/retention, separately review Cloudflare D1 storage/usage and backups; never destroy history by deleting the production D1 database as part of a routine pause.
 
 ## Reconfigure for another term (proposed, NOT implemented)
@@ -32,12 +32,11 @@ Make changes in a new reviewed development branch; **do not overwrite the active
 7. Deploy separately to staging/test environments where feasible; verify rollback; only after review update production monitor configuration. A new monitoring term must be explicitly approved and deployed.
 8. After changing term configuration, verify several checks, saved observations and phone test safely. Do not claim a *genuine seat-opening alert* happened when only the synthetic/test path was exercised.
 
-## What historical data can demonstrate forever
+## Archived data and offline tests
 
-- The original code, CI checks, architecture and tradeoffs are visible in GitHub.
-- Synthetic examples demonstrate reserved/unreserved classification and correct notification decisions without requiring active registration.
-- Sanitized historical snapshots demonstrate that D1, charting, check cadence and freshness were operational **at the observed time**.
-- Do not treat archived data as live, or infer a universally reliable service from one day's successful observations.
+- Offline tests cover reserved/unreserved classification and notification decisions without live catalog access.
+- Historical D1 records remain separate from the current semester configuration.
+- Archived samples are point-in-time records and should not be represented as live monitoring results.
 
 ## Future roadmap, not a delivered feature
 
