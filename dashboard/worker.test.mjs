@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
-import worker from './worker.js';
+import worker, { classifyFreshness } from './worker.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const token = 't'.repeat(43);
@@ -22,7 +22,7 @@ function mockDb() {
                 measured_intervals: 134, average_minutes: 5, longest_gap_minutes: 5.28,
                 gaps_over_10_minutes: 0, gaps_over_15_minutes: 0,
               }] };
-              if (sql.includes('FROM checks')) return { results: [{ total: 135, success: 135, failed: 0, latest: '2026-11-10T20:05:18.252629+00:00' }] };
+              if (sql.includes('FROM checks')) return { results: [{ total: 135, success: 135, failed: 0, latest: '2026-11-10T20:05:18.252629+00:00', latest_overall: '2026-11-10T20:05:18.252629+00:00' }] };
               if (sql.includes('FROM observations')) return { results: [
                 { crn: '17582', observed_at_utc: '2026-11-10T20:05:18.252629+00:00', total_available: 0, unreserved_available: null, classification: 'full' },
                 { crn: '17593', observed_at_utc: '2026-11-10T20:05:18.252629+00:00', total_available: 3, unreserved_available: null, classification: 'unknown' },
@@ -63,6 +63,9 @@ test('read-only API returns bounded, fixed-query course data', async () => {
   assert.equal(res.headers.get('cache-control'), 'private, no-store');
   const data = await res.json();
   assert.equal(data.health.total, 135);
+  assert.equal(data.health.latest_overall, '2026-11-10T20:05:18.252629+00:00');
+  assert.ok(Number.isFinite(Date.parse(data.generated_at_utc)));
+  assert.ok(['healthy','delayed','stale'].includes(data.freshness.state));
   assert.equal(data.samples.length, 2);
   assert.equal(data.samples[1].classification, 'unknown');
   assert.equal(data.samples[1].unreserved_available, null);
@@ -124,4 +127,44 @@ test('HTML labels cadence as recorded, not guaranteed trigger delivery', async (
   assert.match(html, /Does not measure missed triggers/);
   assert.match(html, /id="gapIntervals"/);
   assert.match(html, /id="gapLongest"/);
+});
+
+test('freshness classifier handles exact thresholds and missing/future timestamps', () => {
+  const now = Date.parse('2026-11-10T23:00:00.000Z');
+  const ago = minutes => new Date(now - minutes * 60000).toISOString();
+  assert.deepEqual(classifyFreshness(ago(0), now), { state: 'healthy', age_minutes: 0 });
+  assert.deepEqual(classifyFreshness(ago(10), now), { state: 'healthy', age_minutes: 10 });
+  assert.equal(classifyFreshness(ago(10.01), now).state, 'delayed');
+  assert.equal(classifyFreshness(ago(15), now).state, 'delayed');
+  assert.equal(classifyFreshness(ago(15.01), now).state, 'stale');
+  assert.deepEqual(classifyFreshness(null, now), { state: 'no_data', age_minutes: null });
+  assert.equal(classifyFreshness('invalid-time', now).state, 'clock_error');
+  assert.equal(classifyFreshness(new Date(now + 3 * 60000).toISOString(), now).state, 'clock_error');
+  assert.deepEqual(classifyFreshness(new Date(now + 60000).toISOString(), now), { state: 'healthy', age_minutes: 0 });
+});
+
+test('freshness uses global latest check, independent of selected chart range', async () => {
+  const { db, calls } = mockDb();
+  const request = new Request(base + '/api/dashboard?range=7d', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  const response = await worker.fetch(request, { DB: db, DASHBOARD_READ_TOKEN: token });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.health.latest_overall, '2026-11-10T20:05:18.252629+00:00');
+  assert.equal(data.freshness.state, 'stale');
+  const healthQuery = calls.find(call => call.sql.includes('FROM checks') && !call.sql.includes('LAG(executed_at_utc)'));
+  assert.match(healthQuery.sql, /SELECT MAX\(executed_at_utc\) FROM checks/);
+});
+
+test('dashboard displays freshness and supports explicit refresh without extra requests in background', async () => {
+  const { db, calls } = mockDb();
+  const response = await worker.fetch(new Request(base + '/'), { DB: db, DASHBOARD_READ_TOKEN: token });
+  const html = await response.text();
+  assert.match(html, /Latest stored check/);
+  assert.match(html, /id="freshnessState"/);
+  assert.match(html, /id="refreshHistory"/);
+  assert.match(html, /setInterval\(paintFreshness,60000\)/);
+  assert.match(html, /new records load only when you click Refresh history/);
+  assert.equal(calls.length, 0);
 });
