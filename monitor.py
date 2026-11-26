@@ -22,8 +22,8 @@ PUBLIC_COURSE_SEARCH = "https://ssbstureg.gmu.edu/StudentRegistrationSsb/ssb/ter
 TERM_NAME = "Spring 2027"
 
 COURSES = {
-    "17582": {"name": "IT 304 DL1", "number": "304"},
-    "17593": {"name": "IT 341 DL1", "number": "341"},
+    "17582": {"name": "IT 304 DL1", "number": "304", "status": "retired"},
+    "17593": {"name": "IT 341 DL1", "number": "341", "status": "active"},
 }
 
 STATE_PATH = Path(__file__).with_name("seat_state.json")
@@ -33,6 +33,14 @@ USER_AGENT = "GMUSeatMonitor/0.1 (student, read-only, low-frequency)"
 
 class SearchError(Exception):
     pass
+
+
+def active_courses(courses=None):
+    """Select live targets without removing retired identities or cached history."""
+    courses = COURSES if courses is None else courses
+    if any(course.get("status") not in ("active", "retired") for course in courses.values()):
+        raise ValueError("Course status must be active or retired")
+    return {crn: course for crn, course in courses.items() if course["status"] == "active"}
 
 
 def _json_request(session, method, path, **kwargs):
@@ -499,7 +507,7 @@ def start_history_capture():
 def check_once(term_code, state, capture=None):
     failures = 0
 
-    for crn, course in COURSES.items():
+    for crn, course in active_courses().items():
         name = course["name"]
 
         try:
@@ -626,7 +634,7 @@ def main():
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Run one live check of both CRNs"
+        help="Run one live check of active courses only"
     )
 
     parser.add_argument(
@@ -654,12 +662,14 @@ def main():
         demo()
         return 0
 
+    targets = active_courses()
+
     if args.test_notification:
         sent = notify(
             "GMU phone alert test",
             (
                 "Notifications are configured for "
-                "IT 304 and IT 341. "
+                f"{', '.join(c['name'] for c in targets.values()) or 'no active courses'}. "
                 "This is only a test; "
                 "no seat change detected."
             )
@@ -673,10 +683,13 @@ def main():
         )
 
     print("GMU public class search monitor — READ ONLY")
-    print(
-        "Watching: IT 304 DL1 CRN 17582; "
-        "IT 341 DL1 CRN 17593"
-    )
+    print("Watching: " + ("; ".join(
+        f"{course['name']} CRN {crn}" for crn, course in targets.items()
+    ) or "no active courses"))
+    print(f"Targets: {len(targets)} active, {len(COURSES) - len(targets)} retired (history only).")
+    if not targets:
+        print("No active courses; no catalog requests or seat alerts.")
+        return 0
     print(
         "This script never signs into Patriot Web "
         "and never registers/drops classes."
@@ -700,11 +713,11 @@ def main():
                     errors = check_once(term_code, state, capture)
 
             except SearchError as exc:
-                errors = len(COURSES)
+                errors = len(targets)
                 print(f"ERROR: {exc}")
 
             except requests.RequestException as exc:
-                errors = len(COURSES)
+                errors = len(targets)
                 print(f"ERROR: {exc}")
 
             history_call(capture, "finish", errors)

@@ -20,7 +20,10 @@ def main(endpoint):
     assert urlsplit(endpoint).hostname == "127.0.0.1"
     with tempfile.TemporaryDirectory() as tmp:
         capture = CheckCapture(tmp)
-        with (patch.object(monitor, "get_section", side_effect=[
+        # Both-active synthetic fixture preserves historical partial-check coverage.
+        with (patch.object(monitor, "COURSES", {
+                crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}),
+              patch.object(monitor, "get_section", side_effect=[
                 {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved; PRIVATE_TEXT"},
                 monitor.SearchError("synthetic failure")]) as fetch,
               patch.object(monitor, "notify", return_value=True) as bark,

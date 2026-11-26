@@ -100,7 +100,7 @@ only with synthetic inputs. There is no historical retry path to GMU or Bark.
 5. The earliest unresolved check blocks all later checks sharing any term/CRN.
    This includes deferred and permanently blocked records, and dependencies
    propagate through multi-course batches. Independent courses can progress;
-   the current two-course batches will normally block both courses together.
+   a historical two-course batch blocks both members together. Current live checks contain only active IT 341; retiring IT 304 does not discard or alter older queued two-course batches.
 6. An OS `flock` serializes enqueue and drain across processes. It is held through
    HTTP; there is no expiring lease that could permit a slow old sender to commit
    after a new owner. Contention fails immediately with `OUTBOX_BUSY`. Only the
@@ -265,10 +265,10 @@ with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as db:
 
 ## Quotas, retention and realistic guarantees
 
-At two courses every five minutes: 288 completed checks and up to 576 observations
-per day. A batched normal drain makes about 288 Worker requests/day, plus retries;
+At one active course every five minutes: 288 completed checks and up to 288
+observations per day. Older two-course batches and synthetic examples remain valid. A batched normal drain makes about 288 Worker requests/day, plus retries;
 an outage does not cause each newer same-course record to be attempted repeatedly.
-The base D1 inserts are about 864 rows/day plus opening events, index maintenance,
+The base D1 inserts are about 576 rows/day for one active course plus opening events, index maintenance,
 check upsert writes and retries. D1 bills/counts affected/indexed rows, not merely
 HTTP requests; measure actual writes and query scans before enabling anything.
 

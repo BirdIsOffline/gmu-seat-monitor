@@ -496,3 +496,19 @@ test("original partial monitor check survives subprocess submission and lost rec
     assert.equal(JSON.stringify(observation).includes("PRIVATE_TEXT"), false);
   } finally { clearTimeout(deadline); }
 });
+
+
+test("retired IT304 historical ingestion and idempotent replay preserve observations and events", async () => {
+  const first = sample(0, 0), opening = sample(5, 1);
+  assert.equal((await send(first)).status, 200);
+  assert.equal((await send(opening)).status, 200);
+  const original = (await rows("observations")).filter(o => o.crn === "17582");
+  const events = await rows("opening_events");
+  assert.equal(events.length, 1);
+  assert.equal((await send(opening)).status, 200);
+  const active = payload({ executed_at_utc: "2026-11-09T00:10:00.000000+00:00",
+    observations: [course({ crn: "17593", course_number: "341" })] });
+  assert.equal((await send(active)).status, 200);
+  assert.deepEqual((await rows("observations")).filter(o => o.crn === "17582"), original);
+  assert.deepEqual(await rows("opening_events"), events);
+});

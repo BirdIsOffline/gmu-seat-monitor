@@ -53,7 +53,7 @@ jobs:
           key: gmu-seat-state-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             gmu-seat-state-
-      - name: Check both courses once and send any Bark alerts
+      - name: Check active courses once and send any Bark alerts
         env:
           BARK_DEVICE_KEY: ${{ secrets.BARK_DEVICE_KEY }}
           # Local structured capture only; no ingestion secret in monitoring.

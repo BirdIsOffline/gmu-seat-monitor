@@ -10,9 +10,19 @@ GMU Seat Monitor checks public George Mason University course listings for speci
 
 A separate Cloudflare Worker stores historical observations in D1. An independently deployed, token-protected dashboard displays seat history, monitoring cadence, check results, and data freshness.
 
-The current configuration monitors **Spring 2027**:
-- **IT 304 DL1** — CRN 17582
-- **IT 341 DL1** — CRN 17593
+The Spring 2027 configuration has **one active target and one retired course**:
+
+| Course | CRN | Status | Behavior |
+| --- | --- | --- | --- |
+| IT 304 DL1 | 17582 | Retired | Historical observations and dashboard history only; no live lookups or seat alerts |
+| IT 341 DL1 | 17593 | Active | Existing polling, seat classification and notification behavior |
+
+Course status is an explicit `active` or `retired` field in `monitor.py` and the
+standalone dashboard's `COURSES` list. An offline parity test keeps the two
+configurations aligned. Retiring a course does not remove cached snapshots,
+observations or opening events, and historical ingestion still accepts delayed
+records and unchanged retries for either course. Synthetic tests and demos may
+explicitly activate both courses to retain historical regression coverage.
 
 ## Features
 
@@ -21,7 +31,7 @@ The current configuration monitors **Spring 2027**:
 - **Change-based push alerts:** compares current and previous observations to suppress unchanged, decreasing, and known reserved-only states.
 - **Automated execution:** external five-minute dispatch triggers a GitHub Actions monitoring job; scheduled execution is best-effort.
 - **Historical storage:** separate authenticated Cloudflare Worker records public course-level checks, observations, and opening events in D1.
-- **Analytics dashboard:** separate read-token-protected Worker provides 24-hour and 7-day charts, recent checks, cadence statistics, and freshness indicators.
+- **Analytics dashboard:** separate read-token-protected Worker retains both courses in 24-hour and 7-day history, labels retired snapshots, and derives monitoring freshness from active-course observations only.
 - **Automated tests:** offline Python and JavaScript tests cover classification, alert decisions, persistence, Worker endpoints, and failure cases.
 
 ## Architecture
@@ -65,7 +75,7 @@ python demo_live_history.py
 python -m unittest discover -s tests -v
 ```
 
-These demos and tests use synthetic data and mocked network requests. They do not contact GMU or Bark.
+These demos and tests use synthetic data and mocked network requests. They do not contact GMU or Bark. The complete history/capture/outbox suite and structured handoff demo require Linux/POSIX; CI uses Ubuntu. Course-status regressions also run on Windows with `python -m unittest discover -s tests -p test_course_status.py -v`.
 
 Run the dashboard's Node.js tests:
 
@@ -91,7 +101,7 @@ For further local testing, see [offline demonstration](docs/LOCAL_DEMO.md).
 
 ## Deployment and operations
 
-The monitoring and CI workflows are separate. Live monitoring requires explicit approval through the `GMU_POLLING_APPROVED` repository variable; Bark delivery uses a GitHub Actions secret. Cloudflare ingestion and dashboard services use separate credentials and are deployed independently.
+The monitoring and CI workflows are separate. Live monitoring requires explicit approval through the `GMU_POLLING_APPROVED` repository variable; Bark delivery uses a GitHub Actions secret. Cloudflare ingestion and dashboard services use separate credentials and are deployed independently. Publishing the monitor changes affects future runs of the configured branch; the dashboard status/freshness changes require a separately approved dashboard deployment. No D1 migration, history deletion, scheduler change or credential change is needed. See the [course retirement procedure](CLOUD_SETUP.md#course-retirement-and-release).
 
 - [Cloud setup](CLOUD_SETUP.md)
 - [Dashboard deployment](dashboard/DEPLOYMENT.md)

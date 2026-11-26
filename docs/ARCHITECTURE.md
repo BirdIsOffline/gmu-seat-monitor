@@ -26,6 +26,8 @@
 
 **Reserved vs. general seats.** A positive total seat count alone is not proof that a student can enroll. When a reservation summary is returned, an alert requires an explicit positive count of unreserved seats. If reservation metadata is missing, results are marked *potentially available* and require manual verification.
 
+**Course lifecycle.** Explicit active/retired status excludes IT 304 from new lookups and seat notifications while preserving cached state, historical ingestion, observations and events. IT 341 retains the existing alert rules. The standalone dashboard mirrors statuses under a CI parity guard and calculates active freshness independently of retired history.
+
 **Noise reduction.** The latest alert policy reports increases in candidate seats (0→1, 1→2, etc.), not class closure, reserved-only changes, or unrelated changes.
 
 **Separate test and live workflows.** Automated tests should run whenever code changes, not poll GMU on every commit. The live job remains explicitly authorized and separately scheduled.

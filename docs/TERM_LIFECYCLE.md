@@ -1,12 +1,13 @@
 # Term lifecycle and archival
 
-## Current scope (as deployed November 10, 2026)
+## Current source scope
 
 The public catalog monitor is currently **Spring 2027 only**:
 - `TERM_NAME = "Spring 2027"` in `monitor.py`
-- CRN 17582 = IT 304 DL1; CRN 17593 = IT 341 DL1
+- CRN 17582 = IT 304 DL1, **retired/history-only**; CRN 17593 = IT 341 DL1, **active**
 - `resolve_term_code()` currently requires "spring 2027" in the returned term description
-- `dashboard/worker.js` statically names the Spring 2027 pair in HTML, read-only queries and graphs
+- `monitor.py` and the standalone `dashboard/worker.js` carry explicit course statuses, checked for parity in CI. Only active courses are polled; both retain historical queries and graphs.
+- Retirement is a reviewed source change with a separate release/deployment step; it does not alter live services by itself. See [retirement and release](../CLOUD_SETUP.md#course-retirement-and-release).
 
 The Cloudflare/D1 schema stores a `term` as well as a `crn` per course observation. A new term does not inherently erase historical records. However, **the current dashboard is not a multi-semester browser**, and the monitor does not automatically recognize a new term.
 
@@ -40,7 +41,7 @@ Make changes in a new reviewed development branch; **do not overwrite the active
 
 ## Future roadmap, not a delivered feature
 
-- Configurable term/course metadata (validated config + explicit approval)
+- Multi-term metadata and state isolation (course-level active/retired status is implemented for the current term)
 - First-class archived-term selector and read-only historic dashboard
 - Per-term state isolation / CRN reuse regression tests
 - Optional safe expiration / polling pause control after a term ends

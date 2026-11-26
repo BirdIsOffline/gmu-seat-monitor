@@ -31,6 +31,10 @@ def public_row(crn, number, unreserved, reserved):
 
 
 class SyntheticNotificationPipelineTests(unittest.TestCase):
+    def setUp(self):
+        both_active = {crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}
+        self.enterContext(patch.object(monitor, "COURSES", both_active))
+
     def test_one_candidate_opening_reaches_mock_bark_and_reserved_only_change_is_silent(self):
         """Run real parsing, decisions, state persistence and notify() with mocked I/O."""
         with tempfile.TemporaryDirectory() as folder:
@@ -98,7 +102,7 @@ class SyntheticNotificationPipelineTests(unittest.TestCase):
 
             with (
                 patch.object(monitor, "COURSES", {
-                    "17593": {"name": "IT 341 DL1", "number": "341"},
+                    "17593": {"name": "IT 341 DL1", "number": "341", "status": "active"},
                 }),
                 patch.object(monitor, "STATE_PATH", state_path),
                 patch.object(monitor, "get_section", return_value=current),

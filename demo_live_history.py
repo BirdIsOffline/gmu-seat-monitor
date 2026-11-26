@@ -18,7 +18,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "history-handoff"
         capture = CheckCapture(root)
-        with (patch.object(monitor, "get_section", side_effect=[
+        # Both-active synthetic fixture preserves historical partial-check coverage.
+        with (patch.object(monitor, "COURSES", {
+                crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}),
+              patch.object(monitor, "get_section", side_effect=[
                 {"seatsAvailable": 0, "reservedSeatSummary": "0 of 10 unreserved"},
                 monitor.SearchError("synthetic lookup failure")]) as fetch,
               patch.object(monitor, "notify") as bark,
