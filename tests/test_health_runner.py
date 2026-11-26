@@ -20,6 +20,11 @@ GOOD_LOG = (
 
 
 class HealthReportTests(unittest.TestCase):
+    def setUp(self):
+        both_active = {crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}
+        self.enterContext(patch.object(monitor, "COURSES", both_active))
+        self.enterContext(patch.object(health_runner, "COURSES", both_active))
+
     def test_both_courses_successful(self):
         success, courses = health_runner.summarize_output(GOOD_LOG, 0)
         self.assertTrue(success)

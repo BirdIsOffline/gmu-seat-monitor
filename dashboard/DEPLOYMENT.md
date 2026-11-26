@@ -1,10 +1,10 @@
 # Dashboard deployment runbook (Cloudflare dashboard; manually authorized)
 
-This runbook applies to the **separate** dashboard Worker from PR #7. The ingestion Worker `gmu-seat-history-production-worker`, its `/v1/checks` endpoint, the external scheduler, GitHub Actions, Bark settings, database schema and monitoring should remain **unchanged**. Do not import an ingestion token into this Worker.
+This runbook applies to the **separate** historical dashboard Worker. The ingestion Worker `gmu-seat-history-production-worker`, its `/v1/checks` endpoint, the external scheduler, GitHub Actions, Bark settings, database schema and monitoring should remain **unchanged**. Do not import an ingestion token into this Worker.
 
 ## Prerequisites and identifiers
 
-- GitHub source: https://raw.githubusercontent.com/BirdIsOffline/gmu-seat-monitor/feature/history-dashboard/dashboard/worker.js
+- GitHub source: https://raw.githubusercontent.com/BirdIsOffline/gmu-seat-monitor/main/dashboard/worker.js
 - New Worker name: `gmu-seat-history-dashboard` (must NOT be the existing `gmu-seat-history-production-worker`)
 - Existing D1 database: `gmu-seat-history-production` (do not choose staging or recovery)
 - Worker D1 binding variable: **`DB`**
@@ -20,9 +20,9 @@ This runbook applies to the **separate** dashboard Worker from PR #7. The ingest
 5. Open the raw GitHub source URL above. Select all and copy the full JavaScript file. Return to the NEW Worker and choose **Edit code**. Replace the Hello World source in the primary Worker script with the copied JavaScript. Save/deploy. This code is standalone; it needs no imports, libraries or build commands.
 6. Open the NEW Worker's `https://...workers.dev/` URL. You should see **Seat availability history** with a read-token input (not sample data before authentication).
 7. Security check: request `https://...workers.dev/api/dashboard?range=24h` in a *new browser tab with no authorization header*. It should reply with HTTP 401 and JSON code `UNAUTHORIZED` (not data).
-8. Back on `/`, enter the **separate dashboard token** from your password manager. Confirm two course rows (IT 304 DL1 / CRN 17582, IT 341 DL1 / CRN 17593) plus 24-hour and 7-day charts. IT 341 unknown unreserved status must read **Unknown**, not "3 unreserved".
+8. Back on `/`, enter the **separate dashboard token** from your password manager. Confirm IT 304 DL1 / CRN 17582 is **Retired · history only** and IT 341 DL1 / CRN 17593 is **Active**, with one active / one retired course and both historical series preserved in 24-hour and 7-day charts. The latest snapshot table can show older retained samples outside those windows. Verify freshness follows IT 341 observations, not IT 304 history or a recent check alone. IT 341 unknown unreserved status must read **Unknown**, not "3 unreserved".
 9. Share only the publicly visible Worker **URL without token or query credentials**, and a screenshot with any secret hidden, so the endpoint and presentation can be checked. Never share the token.
-10. After a successful live review, consider whether to merge PR #7. No merge is needed to paste its source into a new Worker.
+10. Use only the separately approved reviewed source revision; repository edits do not deploy it automatically. Existing dashboard updates require no new Worker, token, D1 database or migration. Do not treat this runbook as approval to change live services.
 
 ## What approval does and does not authorize
 

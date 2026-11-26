@@ -1,5 +1,11 @@
 // Read-only, token-gated dashboard. Deploy as a separate Worker; never reuse the ingestion token.
-const IDS = ['17582', '17593'];
+// Keep statuses aligned with monitor.py; an offline parity test enforces this.
+export const COURSES = [
+  {"crn": "17582", "name": "IT 304 DL1", "status": "retired"},
+  {"crn": "17593", "name": "IT 341 DL1", "status": "active"}
+];
+const IDS = COURSES.map(course => course.crn);
+const PLACEHOLDERS = IDS.map(() => '?').join(', ');
 const RANGES = Object.freeze({ '24h': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000 });
 const PAGE = String.raw`<!doctype html>
 <html lang="en">
@@ -34,15 +40,15 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <p id="status" aria-live="polite"></p>
 <section class="metrics" aria-label="Dashboard summary">
 <div class="metric"><div class="label">Stored checks (selected window)</div><strong id="checks">—</strong></div>
-<div class="metric"><div class="label">Recorded check success</div><strong id="rate">—</strong></div>
-<div class="metric"><div class="label">IT 304 · Total seats</div><strong id="it304">—</strong></div>
-<div class="metric"><div class="label">IT 341 · Total seats</div><strong id="it341">—</strong></div></section>
+<div class="metric"><div class="label">Recorded check success · all courses</div><strong id="rate">—</strong></div>
+<div class="metric"><div class="label" id="label304">IT 304 · Last stored total</div><strong id="it304">—</strong></div>
+<div class="metric"><div class="label" id="label341">IT 341 · Last stored total</div><strong id="it341">—</strong></div></section>
 <section class="panel" style="margin-top:18px" aria-label="Stored history freshness">
-<h2>Latest stored check · <span id="freshnessState" class="unknown" aria-live="polite">Not checked</span></h2>
-<p id="freshnessAge" class="note">Load history to see the latest recorded check.</p>
+<h2>Active-course freshness · <span id="freshnessState" class="unknown" aria-live="polite">Not checked</span></h2>
+<p id="freshnessAge" class="note">Load history to see active-course observation freshness.</p>
 <p id="freshnessTime" class="note"></p>
 <button type="button" id="refreshHistory">Refresh history</button>
-<p class="note">Freshness describes the most recent check saved to D1: Healthy at 10 minutes or less, Delayed above 10 through 15 minutes, Stale above 15 minutes. Status ages on-screen but new records load only when you click Refresh history or change the time range. It does not verify scheduled triggers or Bark delivery.</p>
+<p class="note">Freshness describes the oldest latest observation among active courses only: Healthy at 10 minutes or less, Delayed above 10 through 15 minutes, Stale above 15 minutes. Status ages on-screen but new records load only when you click Refresh history or change the time range. Retired courses retain history and do not become stale monitoring targets. It does not verify scheduled triggers or Bark delivery.</p>
 </section>
 <section class="panel" aria-label="Recorded check cadence">
 <h2>Recorded check cadence</h2>
@@ -54,11 +60,11 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Gaps over 15 min</div><strong id="gap15">—</strong></div>
 </div>
 <p class="note">Calculated only between consecutive checks stored in the selected window. Does not measure missed triggers before the first record or after the last record, and does not prove every scheduled run occurred. Durations are in minutes.</p></section>
-<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span>IT 304 DL1 · 17582</span><span><span class="dot second"></span>IT 341 DL1 · 17593</span></div>
+<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span><span id="legend304">IT 304 DL1 · 17582</span></span><span><span class="dot second"></span><span id="legend341">IT 341 DL1 · 17593</span></span></div>
 <div class="chart"><canvas id="chart" role="img" aria-label="Line chart of reported total available seats for both courses"></canvas></div>
 <p class="note">These are periodic snapshots, not exact seat-opening times. A line does not guarantee seats remained available between checks. Gaps over 15 minutes break the line. An unknown unreserved count must never be interpreted as seats available for general registration.</p></section>
-<section class="panel"><h2>Latest course snapshots</h2><div class="scroll"><table><thead><tr><th>Course</th><th>Sample time (local)</th><th>Total</th><th>Unreserved</th><th>Classification</th></tr></thead><tbody id="latestRows"><tr><td colspan="5">No data loaded.</td></tr></tbody></table></div></section>
-<section class="panel"><h2>Observed seat increases</h2><div class="scroll"><table><thead><tr><th>Sample time (local)</th><th>Course</th><th>Previous</th><th>New potential</th><th>Type</th></tr></thead><tbody id="eventsRows"><tr><td colspan="5">No data loaded.</td></tr></tbody></table></div><p class="note">Events describe sampled increases in potential availability; they do not cause Bark alerts or prove eligibility.</p></section>
+<section class="panel"><h2>Latest stored course snapshots · all history</h2><div class="scroll"><table><thead><tr><th>Course</th><th>Monitoring</th><th>Sample time (local)</th><th>Total</th><th>Unreserved</th><th>Classification</th></tr></thead><tbody id="latestRows"><tr><td colspan="6">No data loaded.</td></tr></tbody></table></div></section>
+<section class="panel"><h2>Observed seat increases</h2><div class="scroll"><table><thead><tr><th>Sample time (local)</th><th>Course</th><th>Previous</th><th>New potential</th><th>Type</th></tr></thead><tbody id="eventsRows"><tr><td colspan="5">No data loaded.</td></tr></tbody></table></div><p class="note">Events include retired-course history. They describe sampled increases in potential availability; they do not cause Bark alerts or prove eligibility.</p></section>
 <p class="note" id="coverage"></p></div>
 </main>
 <script>
@@ -77,10 +83,10 @@ function paintFreshness(){
  if(!freshnessSnapshot)return;
  const initial=freshnessSnapshot.age_minutes;
  const age=initial===null?null:Math.max(0,initial+(performance.now()-freshnessUpdatedAt)/60000);
- const state=freshnessSnapshot.state==='clock_error'?'clock_error':age===null?'no_data':age<=10?'healthy':age<=15?'delayed':'stale';
- const text=state==='healthy'?'Healthy':state==='delayed'?'Delayed':state==='stale'?'Stale':state==='clock_error'?'Clock issue':'No records';
+ const state=freshnessSnapshot.state==='inactive'?'inactive':freshnessSnapshot.state==='clock_error'?'clock_error':age===null?'no_data':age<=10?'healthy':age<=15?'delayed':'stale';
+ const text=state==='healthy'?'Healthy':state==='delayed'?'Delayed':state==='stale'?'Stale':state==='clock_error'?'Clock issue':state==='inactive'?'No active courses':'No active-course records';
  const el=byId('freshnessState');el.textContent=text;el.className=state==='healthy'?'healthy':state==='delayed'?'delayed':state==='stale'?'stale':'unknown';
- byId('freshnessAge').textContent=age===null?(state==='clock_error'?'Stored timestamp is invalid or too far in the future.':'No stored checks found.'):'Last loaded check is '+age.toFixed(1)+' minutes old.';
+ byId('freshnessAge').textContent=age===null?(state==='clock_error'?'Stored timestamp is invalid or too far in the future.':state==='inactive'?'All configured courses are retired.':'No observations found for an active course.'):'Limiting active-course observation is '+age.toFixed(1)+' minutes old.';
 }
 async function load(){
  setStatus('Loading recorded samples...',false);
@@ -89,7 +95,7 @@ async function load(){
  const data=await resp.json();samples=data.samples;
  freshnessSnapshot=data.freshness;
  freshnessUpdatedAt=performance.now();
- byId('freshnessTime').textContent='Last stored check: '+fmtTime(data.health.latest_overall)+'. Snapshot retrieved: '+fmtTime(data.generated_at_utc)+'.';
+ byId('freshnessTime').textContent='Last stored check (all courses; separate from active freshness): '+fmtTime(data.health.latest_overall)+'. Snapshot retrieved: '+fmtTime(data.generated_at_utc)+'.';
  paintFreshness();
  byId('checks').textContent=data.health.total;
  byId('rate').textContent=data.health.total?((100*data.health.success/data.health.total).toFixed(1)+'%'):'—';
@@ -99,15 +105,18 @@ async function load(){
  byId('gapLongest').textContent=gaps.longest_gap_minutes===null?'—':gaps.longest_gap_minutes.toFixed(2);
  byId('gap10').textContent=gaps.gaps_over_10_minutes;
  byId('gap15').textContent=gaps.gaps_over_15_minutes;
- const latest={};for(const s of samples)latest[s.crn]=s;
- for(const crn of ['17582','17593']){const s=latest[crn];byId(crn==='17582'?'it304':'it341').textContent=s?pretty(s.total_available):'—'}
  const tbody=byId('latestRows');tbody.replaceChildren();
- for(const [crn,label] of [['17582','IT 304 DL1'],['17593','IT 341 DL1']]){
- const s=latest[crn];tbody.appendChild(s?row([label,fmtTime(s.observed_at_utc),pretty(s.total_available),pretty(s.unreserved_available),s.classification]):row([label,'No samples','—','—','—']))}
+ for(const course of data.courses){
+ const suffix=course.crn==='17582'?'304':'341';const s=course.latest;
+ const status=course.status==='retired'?'Retired · history only':'Active';
+ byId('label'+suffix).textContent=course.name+' · '+status+' · Last stored total';
+ byId('it'+suffix).textContent=s?pretty(s.total_available):'—';
+ byId('legend'+suffix).textContent=course.name+' · '+course.crn+' · '+status;
+ tbody.appendChild(s?row([course.name,status,fmtTime(s.observed_at_utc),pretty(s.total_available),pretty(s.unreserved_available),s.classification]):row([course.name,status,'No samples','—','—','—']))}
  const eventsBody=byId('eventsRows');eventsBody.replaceChildren();
  if(!data.events.length) eventsBody.appendChild(row(['No qualifying seat increases recorded in this window.','','','','']));
  for(const e of data.events){eventsBody.appendChild(row([fmtTime(e.detected_at_utc),e.crn,e.previous_available,e.new_available,e.classification]))}
- byId('coverage').textContent='Coverage: '+data.health.total+' stored checks ('+data.health.failed+' failed), '+samples.length+' returned course observations. Last recorded check: '+fmtTime(data.health.latest)+'. Missing scheduled runs are not included in this success rate.';
+ byId('coverage').textContent='Coverage: '+data.health.total+' stored checks ('+data.health.failed+' failed); '+data.courses.filter(c=>c.status==='active').length+' active / '+data.courses.filter(c=>c.status==='retired').length+' retired courses; '+samples.length+' returned course observations. Last recorded check: '+fmtTime(data.health.latest)+'. Missing scheduled runs are not included in this success rate.';
  drawChart();setStatus('Historical samples loaded. Last refreshed '+new Date().toLocaleTimeString()+'.',false);
 }
 function drawChart(){
@@ -171,7 +180,7 @@ function utcCutoff(ms) {
   return new Date(Date.now() - ms).toISOString().replace('Z', '000+00:00');
 }
 
-// Based on server time and the latest stored check across ALL history, not just the selected graph window.
+// Based on server time and a stored timestamp across ALL history, not just the graph window.
 export function classifyFreshness(latest, atMs) {
   if (latest === null || latest === undefined) return { state: 'no_data', age_minutes: null };
   const sampleMs = Date.parse(latest);
@@ -183,10 +192,31 @@ export function classifyFreshness(latest, atMs) {
     age_minutes: Math.round(minutes * 100) / 100 };
 }
 
+// Current status is presentation/polling configuration, never a rewrite of historical facts.
+export function monitoringSummary(latestRows, atMs, courses = COURSES) {
+  const byCrn = new Map(latestRows.map(row => [row.crn, row]));
+  const states = courses.map(course => {
+    if (!['active', 'retired'].includes(course.status)) throw new Error('INVALID_COURSE_STATUS');
+    const latest = byCrn.get(course.crn) ?? null;
+    return { ...course, latest, freshness: course.status === 'retired'
+      ? { state: 'retired', age_minutes: null }
+      : classifyFreshness(latest?.observed_at_utc, atMs) };
+  });
+  const severity = { healthy: 0, delayed: 1, stale: 2, no_data: 3, clock_error: 4 };
+  const active = states.filter(course => course.status === 'active');
+  let worst = null;
+  for (const { freshness } of active) {
+    if (worst === null || severity[freshness.state] > severity[worst.state]
+      || (severity[freshness.state] === severity[worst.state]
+        && freshness.age_minutes > worst.age_minutes)) worst = freshness;
+  }
+  return { courses: states, freshness: worst ?? { state: 'inactive', age_minutes: null } };
+}
+
 async function dashboard(db, range) {
   const since = utcCutoff(RANGES[range]);
   // Fixed SQL and bound parameters only. No D1 write statements and no arbitrary SQL endpoint.
-  const [healthQuery, sampleQuery, eventQuery, cadenceQuery] = await Promise.all([
+  const [healthQuery, sampleQuery, eventQuery, cadenceQuery, latestQuery] = await Promise.all([
     db.prepare(`SELECT COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END),0) AS success,
       COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed,
@@ -194,11 +224,11 @@ async function dashboard(db, range) {
       (SELECT MAX(executed_at_utc) FROM checks) AS latest_overall
       FROM checks WHERE executed_at_utc >= ?`).bind(since).all(),
     db.prepare(`SELECT crn, observed_at_utc, total_available, unreserved_available, classification
-      FROM observations WHERE crn IN (?, ?) AND observed_at_utc >= ?
+      FROM observations WHERE crn IN (${PLACEHOLDERS}) AND observed_at_utc >= ?
       ORDER BY observed_at_utc ASC, crn ASC LIMIT 5000`).bind(...IDS, since).all(),
     db.prepare(`SELECT o.crn, e.detected_at_utc, e.previous_available, e.new_available, e.classification
       FROM opening_events e JOIN observations o ON e.observation_id=o.observation_id
-      WHERE e.detected_at_utc >= ? AND o.crn IN (?, ?)
+      WHERE e.detected_at_utc >= ? AND o.crn IN (${PLACEHOLDERS})
       ORDER BY e.detected_at_utc DESC LIMIT 50`).bind(since, ...IDS).all(),
     db.prepare(`WITH ordered_checks AS (
         SELECT executed_at_utc,
@@ -214,11 +244,18 @@ async function dashboard(db, range) {
         COALESCE(SUM(CASE WHEN minutes > 10 THEN 1 ELSE 0 END), 0) AS gaps_over_10_minutes,
         COALESCE(SUM(CASE WHEN minutes > 15 THEN 1 ELSE 0 END), 0) AS gaps_over_15_minutes
       FROM intervals`).bind(since).all(),
+    db.prepare(`WITH latest AS (
+        SELECT crn, MAX(observed_at_utc) AS observed_at_utc FROM observations
+        WHERE crn IN (${PLACEHOLDERS}) GROUP BY crn
+      )
+      SELECT o.crn, o.observed_at_utc, o.total_available, o.unreserved_available, o.classification
+      FROM observations o JOIN latest l ON o.crn=l.crn AND o.observed_at_utc=l.observed_at_utc
+      ORDER BY o.crn`).bind(...IDS).all(),
   ]);
   const nowMs = Date.now();
   const health = healthQuery.results[0] ?? { total: 0, success: 0, failed: 0, latest: null, latest_overall: null };
   return { range, health, generated_at_utc: new Date(nowMs).toISOString(),
-    freshness: classifyFreshness(health.latest_overall, nowMs),
+    ...monitoringSummary(latestQuery.results, nowMs),
     samples: sampleQuery.results, events: eventQuery.results,
     cadence: cadenceQuery.results[0] ?? { measured_intervals: 0, average_minutes: null,
       longest_gap_minutes: null, gaps_over_10_minutes: 0, gaps_over_15_minutes: 0 } };

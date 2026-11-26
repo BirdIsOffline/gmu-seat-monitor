@@ -2,7 +2,7 @@
 
 The monitor uses a GitHub Actions workflow, an externally configured dispatch schedule, Bark for iPhone notifications, and optional Cloudflare historical storage.
 
-The current setup checks the public Spring 2027 catalog for IT 304 DL1 (CRN 17582) and IT 341 DL1 (CRN 17593). It does not perform registration actions or use student credentials.
+The current source configuration checks **IT 341 DL1 (CRN 17593)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
 
 ## Prerequisites
 
@@ -24,6 +24,43 @@ The operational workflow is [`.github/workflows/seat-monitor.yml`](.github/workf
 6. Configure external dispatch separately to trigger the operational workflow. The reported operational cadence is five minutes; GitHub execution times are best-effort.
 
 To pause polling, disable external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the operational workflow.
+
+## Course retirement and release
+
+- `monitor.py` defines each course's `status`: `active` enables the existing lookup
+  and alert path; `retired` skips that path and preserves the saved snapshot.
+  Unknown or missing status fails validation before polling.
+- Keep the standalone `COURSES` list in `dashboard/worker.js` aligned. CI checks
+  parity; no new build system or external configuration service is required.
+- Health reports mark retired courses as `retired`, not missing or failed. The
+  successful-check denominator includes active courses only. If all courses are
+  retired, the monitor exits without catalog requests or history capture.
+- Status is current configuration, not a historical fact added to old payloads.
+  Ingestion validation, original UUIDs, retry bytes and event calculations remain
+  unchanged for both courses. Do not delete D1 rows, cache entries or backups.
+- Dashboard charts/events retain both course histories in the selected window.
+  Latest stored snapshots also remain visible when older than that window.
+  Retired totals are labelled history-only, not current availability. Freshness
+  uses the oldest latest active-course observation across all history; fresh
+  retired-only records cannot conceal missing or stale active observations.
+  Check success and cadence still describe all stored checks in the window.
+- Reactivating a course requires an explicit reviewed status change in both
+  configurations. It never grants polling permission; `GMU_POLLING_APPROVED`
+  remains mandatory for live workflow checks. Retained comparison state is reused;
+  missed openings during retirement cannot be reconstructed by polling.
+
+After review, publish the monitor/configuration and tests to the workflow's
+configured branch and require successful Ubuntu CI. Confirm no older workflow
+execution is still using the previous two-active-course source. Keep the existing
+external cadence, approval gate, Bark secret and history opt-ins unchanged.
+Separately deploy only the reviewed dashboard source using its existing DB
+binding and read token; no ingestion Worker deployment or schema migration is
+needed. Then inspect an authorized check for one IT 341 lookup, one retired
+health row, unchanged IT 304 history, and correct dashboard freshness. No live
+check or Cloudflare deployment is authorized merely by editing these files.
+
+If dashboard rollback is necessary, preserve D1 and the monitor's retired status.
+Do not revert to a two-active-course monitor just to restore presentation.
 
 ## Historical ingestion and dashboard
 

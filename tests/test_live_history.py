@@ -89,6 +89,11 @@ def submission_env(endpoint):
 
 
 class ProducerTests(unittest.TestCase):
+    def setUp(self):
+        both_active = {crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}
+        self.enterContext(patch.object(monitor, "COURSES", both_active))
+        self.enterContext(patch.object(health_runner, "COURSES", both_active))
+
     def run_monitor(self, root, lookups, enabled=True, state=None):
         logs = io.StringIO()
         capture_root = root / "history-handoff"
@@ -225,7 +230,7 @@ class ProducerTests(unittest.TestCase):
                     real_save(current)
                     events.append("save")
                 logs = io.StringIO()
-                with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304"}}),
+                with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
                       patch.object(monitor, "STATE_PATH", state_path),
                       patch.object(monitor, "get_section", return_value=row()) as lookup,
                       patch.object(monitor, "notify", side_effect=lambda *args: events.append("bark")),
@@ -466,7 +471,7 @@ def lookup(term, crn, number):
         return {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved"}
     Path(sys.argv[2]).touch()
     time.sleep(100)
-with patch.object(monitor, "get_section", side_effect=lookup), patch.object(monitor, "notify"), patch.object(monitor, "save_state"), contextlib.redirect_stdout(io.StringIO()):
+with patch.object(monitor, "COURSES", {crn: dict(c, status="active") for crn, c in monitor.COURSES.items()}), patch.object(monitor, "get_section", side_effect=lookup), patch.object(monitor, "notify"), patch.object(monitor, "save_state"), contextlib.redirect_stdout(io.StringIO()):
     monitor.check_once("202710", {}, capture)
 '''
         proc = subprocess.Popen([sys.executable, "-c", code, str(root), str(marker)], cwd=ROOT,
@@ -564,6 +569,28 @@ with patch.object(monitor, "get_section", side_effect=lookup), patch.object(moni
                                   Path(self.tmp.name) / "missing/report.json", "/missing/summary.md")
         self.assertIn("WRITE_FAILED", logs.getvalue())
         self.assertFalse((self.root / "run_health.json").exists())
+
+
+class RetiredCourseCaptureTests(unittest.TestCase):
+    def test_real_capture_contains_only_active_original_lookup_and_keeps_retired_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = {"seatsAvailable": 9, "reservedSeatSummary": "0 of 10 unreserved"}
+            state = {"17582": old}
+            capture = CheckCapture(root / "handoff")
+            self.addCleanup(capture.close)
+            with (patch.object(monitor, "STATE_PATH", root / "seat_state.json"),
+                  patch.object(monitor, "get_section", return_value=row(0)) as lookup,
+                  patch.object(monitor, "notify") as notify,
+                  patch.object(monitor.time, "sleep"), contextlib.redirect_stdout(io.StringIO())):
+                failures = monitor.check_once("202710", state, capture)
+                capture.finish(failures)
+            lookup.assert_called_once_with("202710", "17593", "341")
+            notify.assert_not_called()
+            body = json.loads(read_prepared(capture.directory, "pending.json").body)
+            self.assertEqual(body["status"], "success")
+            self.assertEqual([o["crn"] for o in body["observations"]], ["17593"])
+            self.assertEqual(json.loads((root / "seat_state.json").read_text())["17582"], old)
 
 
 if __name__ == "__main__":

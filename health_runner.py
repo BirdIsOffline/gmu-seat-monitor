@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from monitor import COURSES
+from monitor import COURSES, active_courses
 
 HERE = Path(__file__).resolve().parent
 REPORT_FILE = HERE / "run_health.json"
@@ -23,8 +23,13 @@ CHECK_TIMEOUT_SECONDS = 240
 def summarize_output(output, returncode):
     """Record only public course status, never account or notification secrets."""
     courses = []
+    active = active_courses(COURSES)
     for crn, config in COURSES.items():
         name = config["name"]
+        if crn not in active:
+            courses.append({"crn": crn, "course": name, "status": "retired",
+                            "detail": "History only; no lookup or seat notifications"})
+            continue
         success_line = re.search(
             rf"^\[[^\n]+\]\s+{re.escape(name)}:\s*(.+)$", output, re.MULTILINE
         )
@@ -42,7 +47,7 @@ def summarize_output(output, returncode):
             status = "not_reported"
             detail = "No course result found in output (see job logs)"
         courses.append({"crn": crn, "course": name, "status": status, "detail": detail})
-    success = returncode == 0 and all(row["status"] == "success" for row in courses)
+    success = returncode == 0 and all(row["status"] in ("success", "retired") for row in courses)
     return success, courses
 
 
@@ -143,7 +148,8 @@ def run_once(runner=subprocess.run, report_path=REPORT_FILE, summary_path=None):
     }
     write_report(report, report_path, summary_path)
     print(f"HEALTH: {'PASS' if success else 'FAIL'} | "
-          f"{sum(row['status'] == 'success' for row in courses)}/{len(courses)} course checks | "
+          f"{sum(row['status'] == 'success' for row in courses)}/"
+          f"{sum(row['status'] != 'retired' for row in courses)} active course checks | "
           f"{report['duration_seconds']:.2f}s")
     return 0 if success else 1
 
