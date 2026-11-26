@@ -12,7 +12,7 @@ import time
 import uuid
 
 from cloud_history import MAX_BYTES, PreparedCheck, prepare_check, validate_prepared
-from monitor import parse_unreserved
+from monitor import parse_unreserved, course_section
 from seat_history import CourseObservation
 
 
@@ -64,7 +64,7 @@ def public_observation(term, crn, number, current):
             count = None
         reserved = ({"unreservedAvailable": count}
                     if type(count) is int and 0 <= count <= 1_000_000 else "unknown")
-    return CourseObservation(term, "IT", number, "DL1", crn, total, reserved)
+    return CourseObservation(term, "IT", number, course_section(crn, number), crn, total, reserved)
 
 
 class CheckCapture:

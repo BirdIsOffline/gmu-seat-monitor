@@ -86,7 +86,7 @@ class NotificationDecisionTests(unittest.TestCase):
 
     def check_change(self, previous, current):
         state = {} if previous is None else {"17582": previous}
-        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
               patch.object(monitor, "get_section", return_value=current),
               patch.object(monitor, "notify", return_value=True) as notifier,
               patch.object(monitor, "save_state"),
@@ -136,7 +136,7 @@ class NotificationDecisionTests(unittest.TestCase):
 
     def test_request_error_does_not_send_alert(self):
         state = {"17582": seat_row(0, 9)}
-        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
               patch.object(monitor, "get_section", side_effect=monitor.SearchError("sample failure")),
               patch.object(monitor, "notify") as notify,
               contextlib.redirect_stdout(io.StringIO())):

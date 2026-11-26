@@ -21,7 +21,7 @@ GOOD_LOG = (
 
 class HealthReportTests(unittest.TestCase):
     def setUp(self):
-        both_active = {crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}
+        both_active = {crn: dict(course, status="active") for crn, course in monitor.COURSES.items() if crn in ("17582", "17593")}
         self.enterContext(patch.object(monitor, "COURSES", both_active))
         self.enterContext(patch.object(health_runner, "COURSES", both_active))
 

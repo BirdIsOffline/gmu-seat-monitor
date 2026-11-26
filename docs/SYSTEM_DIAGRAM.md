@@ -26,7 +26,7 @@ flowchart TB
 - No student account login, enrollment, registration changes or CAPTCHA bypass.
 - Cloudflare ingestion and dashboard use distinct authentication secrets; the dashboard is a separate read-only query path.
 - Historical source facts can still be lost if an ephemeral GitHub runner disappears before acknowledgment.
-- Spring 2027 IT 341 is active; IT 304 is retired from polling and alerts but retained in history. Active-course observations determine monitoring freshness. The term and course identities remain explicitly configured; disable live polling when it is no longer needed. [Term lifecycle](TERM_LIFECYCLE.md).
+- Spring 2027 IT 341 DL1 and IT 343 DL3 are active; IT 304 is retired from polling and alerts but retained in history. Active-course observations determine monitoring freshness. The term and course identities remain explicitly configured; disable live polling when it is no longer needed. [Term lifecycle](TERM_LIFECYCLE.md).
 - Architecture updates in GitHub do **not** automatically redeploy the Cloudflare Workers.
 
 ## Offline verification

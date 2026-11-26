@@ -22,8 +22,9 @@ PUBLIC_COURSE_SEARCH = "https://ssbstureg.gmu.edu/StudentRegistrationSsb/ssb/ter
 TERM_NAME = "Spring 2027"
 
 COURSES = {
-    "17582": {"name": "IT 304 DL1", "number": "304", "status": "retired"},
-    "17593": {"name": "IT 341 DL1", "number": "341", "status": "active"},
+    "17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "retired"},
+    "17593": {"name": "IT 341 DL1", "number": "341", "section": "DL1", "status": "active"},
+    "21051": {"name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active"},
 }
 
 STATE_PATH = Path(__file__).with_name("seat_state.json")
@@ -41,6 +42,17 @@ def active_courses(courses=None):
     if any(course.get("status") not in ("active", "retired") for course in courses.values()):
         raise ValueError("Course status must be active or retired")
     return {crn: course for crn, course in courses.items() if course["status"] == "active"}
+
+
+def course_section(crn, number):
+    """Resolve the exact allowlisted section for catalog matching and live capture."""
+    course = COURSES.get(crn)
+    if course is None or course["number"] != number:
+        raise ValueError("Course identity is not configured")
+    section = course.get("section")
+    if not isinstance(section, str) or not re.fullmatch(r"[A-Z0-9-]{1,10}", section):
+        raise ValueError("Invalid configured section")
+    return section
 
 
 def _json_request(session, method, path, **kwargs):
@@ -124,6 +136,10 @@ def resolve_term_code():
 
 
 def get_section(term_code, crn, course_number):
+    try:
+        section = course_section(crn, course_number)
+    except ValueError as exc:
+        raise SearchError("Invalid configured course identity") from exc
     with new_session() as session:
         try:
             session.get(
@@ -203,12 +219,12 @@ def get_section(term_code, crn, course_number):
             and str(row.get("courseNumber")) == course_number
             and str(row.get("subject", "")).upper() == "IT"
             and str(row.get("term")) == term_code
-            and str(row.get("sequenceNumber", "")).upper() == "DL1"
+            and str(row.get("sequenceNumber", "")).upper() == section
         ):
             return row
 
     raise SearchError(
-        f"IT {course_number} DL1 CRN {crn} not found."
+        f"IT {course_number} {section} CRN {crn} not found."
     )
 
 
@@ -387,7 +403,7 @@ def read_bark_key():
     return key
 
 
-def notify(title, body):
+def notify(title, body, *, actionable=False):
     print("\n" + "=" * 65)
     print(f"ALERT: {title}")
     print(body)
@@ -419,7 +435,8 @@ def notify(title, body):
                     "before changing any registration."
                 ),
                 "url": PUBLIC_COURSE_SEARCH,
-                "level": "timeSensitive",
+                "level": "critical" if actionable else "timeSensitive",
+                **({"sound": "alarm", "call": "1", "volume": "10"} if actionable else {}),
                 "group": "GMU Classes"
             },
             timeout=15
@@ -564,7 +581,7 @@ def check_once(term_code, state, capture=None):
                 "section without a safe swap."
             )
 
-            notify(title, body)
+            notify(title, body, actionable=True)
 
         state[crn] = current
         save_state(state)

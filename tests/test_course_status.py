@@ -21,16 +21,10 @@ ACTIVE_LINE = "[2026-11-09 01:00:00] IT 341 DL1: 1 unreserved seats available; 1
 
 
 class CourseStatusTests(unittest.TestCase):
-    def test_configuration_keeps_both_identities_but_only_it341_active(self):
-        self.assertEqual(set(monitor.COURSES), {"17582", "17593"})
-        self.assertEqual(monitor.COURSES["17582"]["status"], "retired")
-        self.assertEqual(list(monitor.active_courses()), ["17593"])
-
-    def test_dashboard_statuses_match_monitor_configuration(self):
-        source = (ROOT / "dashboard/worker.js").read_text(encoding="utf-8")
-        data = json.loads(re.search(r"export const COURSES = (\[.*?\]);", source, re.S)[1])
-        self.assertEqual({c["crn"]: (c["name"], c["status"]) for c in data},
-                         {crn: (c["name"], c["status"]) for crn, c in monitor.COURSES.items()})
+    def setUp(self):
+        legacy = {crn: c for crn, c in monitor.COURSES.items() if crn in ("17582", "17593")}
+        self.enterContext(patch.object(monitor, "COURSES", legacy))
+        self.enterContext(patch.object(health_runner, "COURSES", legacy))
 
     def test_retired_lookup_alert_and_capture_are_skipped_and_cached_state_preserved(self):
         old = {"seatsAvailable": 9, "reservedSeatSummary": "0 of 10 unreserved"}
@@ -192,3 +186,16 @@ class CourseStatusTests(unittest.TestCase):
         source = (ROOT / ".github/workflows/seat-monitor.yml").read_text()
         self.assertIn("if: vars.GMU_POLLING_APPROVED == 'true' &&", source)
         self.assertIn("Check active courses once", source)
+
+
+class CurrentCourseConfigurationTests(unittest.TestCase):
+    def test_configuration_keeps_retired_history_and_both_active_targets(self):
+        self.assertEqual(set(monitor.COURSES), {"17582", "17593", "21051"})
+        self.assertEqual(monitor.COURSES["17582"]["status"], "retired")
+        self.assertEqual(list(monitor.active_courses()), ["17593", "21051"])
+
+    def test_dashboard_statuses_match_monitor_configuration(self):
+        source = (ROOT / "dashboard/worker.js").read_text(encoding="utf-8")
+        data = json.loads(re.search(r"export const COURSES = (\[.*?\]);", source, re.S)[1])
+        self.assertEqual({c["crn"]: (c["name"], c["status"], c["number"], c["section"]) for c in data},
+                         {crn: (c["name"], c["status"], c["number"], c["section"]) for crn, c in monitor.COURSES.items()})

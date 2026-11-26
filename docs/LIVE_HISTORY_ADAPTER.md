@@ -13,6 +13,14 @@ here. That staging database and the recovery-test database are not production
 history stores. This branch does not deploy, change them, set secrets, or contact
 GMU/Bark. `cloudflare/wrangler.toml` remains a local-only configuration.
 
+## Configured section identity
+
+The current source targets IT 341 DL1 and IT 343 DL3 as active, retaining IT 304
+DL1 as history-only. Live capture uses the validated configured section, so IT 343
+is never relabelled DL1. Generic historical payload validation and D1 already
+support DL3; old UUIDs and retry bodies remain unchanged. The new reference seat
+snapshot is used only in synthetic tests, never as a production observation.
+
 ## Architecture and invariants
 
 ```mermaid

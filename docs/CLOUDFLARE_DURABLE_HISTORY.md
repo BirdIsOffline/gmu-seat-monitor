@@ -175,8 +175,8 @@ These are not account-verified entitlements. Check current
 Miniflare tests do not prove live CPU/quotas/latency. The 50-course cap is an input
 bound, not an assurance that every such request fits a free CPU budget.
 
-Storage is unbounded here: approximately 105,120 checks and 105,120 observations
-per year at one active course and a five-minute cadence, before failures, delayed
+Storage is unbounded here: approximately 105,120 checks and 210,240 observations
+per year at two active courses and a five-minute cadence, before failures, delayed
 submissions and retries. Older two-course history remains retained. Monitor growth; throttle historical imports and leave
 headroom for other workloads. No pruning, automatic paid upgrade or resource
 creation is implemented. Retention must preserve original replay identities,

@@ -200,7 +200,7 @@ class CloudClientTests(unittest.TestCase):
         state = {"17582": {"seatsAvailable": 0, "reservedSeatSummary": "0 of 10 unreserved"}}
         current = {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved"}
         self.session.post.side_effect = requests.Timeout("synthetic database outage")
-        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
               patch.object(monitor, "get_section", return_value=current) as fetch,
               patch.object(monitor, "notify", return_value=True) as notify,
               patch.object(monitor, "save_state"), patch.object(monitor.time, "sleep"),
@@ -263,7 +263,7 @@ class CloudClientTests(unittest.TestCase):
         state = {"17582": {"seatsAvailable": 0, "reservedSeatSummary": "0 of 10 unreserved"}}
         current = {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved"}
         self.session.post.side_effect = [self.reply(503), self.reply(503), self.reply(503)]
-        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
               patch.object(monitor, "get_section", return_value=current) as fetch,
               patch.object(monitor, "notify", return_value=True) as notify,
               patch.object(monitor, "save_state"), patch.object(monitor.time, "sleep"),
