@@ -229,11 +229,14 @@ class ProducerTests(unittest.TestCase):
                 def save(current):
                     real_save(current)
                     events.append("save")
+                def notify(title, body, *, actionable):
+                    self.assertIs(actionable, True)
+                    events.append("bark")
                 logs = io.StringIO()
                 with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
                       patch.object(monitor, "STATE_PATH", state_path),
                       patch.object(monitor, "get_section", return_value=row()) as lookup,
-                      patch.object(monitor, "notify", side_effect=lambda *args: events.append("bark")),
+                      patch.object(monitor, "notify", side_effect=notify),
                       patch.object(monitor, "save_state", side_effect=save),
                       patch.object(monitor, "time", Mock(sleep=lambda seconds: events.append(("sleep", seconds)))),
                       contextlib.redirect_stdout(logs)):
