@@ -24,7 +24,7 @@ Before changing terms:
 - Test reused CRNs, multiple sections, cold starts, invalid terms, lifecycle status and reservations offline.
 - Review backups, access and rollback; release monitor and dashboard independently.
 
-A successful prior check does not authorize another term's polling. Automatic switching, expiration and retrospective reconstruction are not provided.
+Each new term requires polling permission and reviewed configuration. Term switching and retirement are manual; missed observations cannot be reconstructed.
 
 ## Archives
 

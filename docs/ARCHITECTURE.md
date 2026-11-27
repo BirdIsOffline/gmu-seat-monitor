@@ -2,7 +2,7 @@
 
 ## Deployed data flow
 
-The [system diagram](SYSTEM_DIAGRAM.md) shows the boundaries. An external dispatcher invokes GitHub Actions at a five-minute best-effort cadence. The polling gate controls live checks; CI is separate and needs no monitoring credentials.
+An external dispatcher invokes GitHub Actions at a five-minute best-effort cadence, as shown in the [system diagram](SYSTEM_DIAGRAM.md). The polling gate controls live checks; offline CI needs no monitoring credentials.
 
 `monitor.py` resolves the term and matches exact subject, number, section and CRN. State is keyed by CRN for the current term and cached between jobs. History uses `(term, crn)` and copies completed lookups without another catalog request.
 
@@ -22,7 +22,7 @@ The [system diagram](SYSTEM_DIAGRAM.md) shows the boundaries. An external dispat
 | Separate dashboard/token | Read access does not disclose ingestion credentials or expose mutations; D1 binding itself is not read-only |
 | Manual Worker deployment | Git publication and offline CI do not implicitly change hosted services |
 
-The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) distinguishes immutable observations from revisable event edges. The [handoff](LIVE_HISTORY_ADAPTER.md) and [optional outbox](HISTORY_RELIABILITY.md) have different source durability guarantees.
+The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) explains immutable observations and revisable event edges. The deployed [handoff](LIVE_HISTORY_ADAPTER.md) uses temporary runner storage; the [optional outbox](HISTORY_RELIABILITY.md) requires persistent POSIX storage.
 
 ## Failure boundaries
 

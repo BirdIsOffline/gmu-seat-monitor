@@ -15,7 +15,7 @@ node --check dashboard/worker.js
 node --test dashboard/worker.test.mjs
 ```
 
-The current suite contains **252 tests**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. The preceding professional presentation baseline passed 244 hosted tests with zero skips. Mocks and loopback integration establish protocol behavior, not guaranteed live availability. Use the committed npm lockfile.
+[Main CI run 45937201337](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45937201337) passed **252 tests with zero failures or skips**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. The suite checks protocol and application behavior using mocks and local integration. Use the committed npm lockfile.
 
 ## Demonstrations
 
@@ -40,7 +40,7 @@ python -m unittest discover -s tests -p test_notification_pipeline.py -v
 node --test dashboard/worker.test.mjs
 ```
 
-Passing a subset does not replace Ubuntu CI. Do not add platform skips or weaken assertions to report a full local pass.
+This subset omits the POSIX locking, timer and outbox cases covered by the full Ubuntu run.
 
 ## Local Worker development
 

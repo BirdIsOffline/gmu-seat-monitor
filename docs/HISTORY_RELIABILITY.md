@@ -1,6 +1,6 @@
 # Optional persistent POSIX outbox
 
-`history_outbox.py` is a tested disk-backed delivery library, not the deployed Actions history path. Production uses the [per-run handoff](LIVE_HISTORY_ADAPTER.md) and [direct D1 ingestion](CLOUDFLARE_DURABLE_HISTORY.md). This reference preserves the optional queue's stricter ordering and recovery contract.
+`history_outbox.py` is a tested disk-backed delivery library, not the deployed Actions history path. Production uses the [per-run handoff](LIVE_HISTORY_ADAPTER.md) and [direct D1 ingestion](CLOUDFLARE_DURABLE_HISTORY.md). This guide covers the optional queue's stricter ordering and recovery contract.
 
 The outbox is durable only while its filesystem survives. It needs a single POSIX owner, local SQLite locking/fsync, private storage, supervision and backups. An outbox recreated on every ephemeral runner cannot provide cross-run recovery. Caches and expiring artifacts do not close that gap.
 
@@ -27,7 +27,7 @@ The outbox is durable only while its filesystem survives. It needs a single POSI
 5. The earliest unresolved check blocks all later checks sharing any term/CRN.
    This includes deferred and permanently blocked records, and dependencies
    propagate through multi-course batches. Independent courses can progress;
-   a historical two-course batch blocks both members together. Current source checks contain active IT 341 DL1 and IT 343 DL1, DL2 and DL3; retiring IT 304 does not discard or alter older queued two-course batches.
+   a historical two-course batch blocks both members together. The current [target table](../README.md#section-identity-and-lifecycle) has five active sections. Retirement does not discard or alter older queued batches, including those containing IT 304.
 6. An OS `flock` serializes enqueue and drain across processes. It is held through
    HTTP; there is no expiring lease that could permit a slow old sender to commit
    after a new owner. Contention fails immediately with `OUTBOX_BUSY`. Only the
@@ -135,8 +135,7 @@ Path('/tmp/gmu-history-example/prepared.json').write_bytes(prepared.body)
    contents. Keep the original outbox as an archive. Build a **new local replay
    outbox** from all retained original bodies, including delivered ones, ordered
    by timestamp. Re-enqueueing into the original queue is deliberately a no-op.
-   After separate operator review, drain the replay queue into the restored
-   target. Retained D1 IDs deduplicate; a missing suffix appends in order. Verify
+   After validating the restored target, drain the replay queue into it. Retained D1 IDs deduplicate; a missing suffix appends in order. Verify
    row/event counts and pending/blocked state on a separate test target first.
 5. **Older missing records:** the queue's attempted frontier remains strict even though schema 0002 direct ingestion accepts delayed records. Do not edit the original queue to bypass that frontier or generate new UUIDs. Preserve the archive and evaluate an isolated replay queue or direct replay of original facts against the current endpoint. The legacy 0001 endpoint required a sorted rebuild for missing records behind its append frontier.
 
@@ -164,4 +163,4 @@ with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as db:
 
 The guarantee is retry of locally committed bodies while that source survives, with idempotent destination effects for retained UUIDs. It is not lossless monitoring or exactly-once delivery. Data can be lost before enqueue, with the only disk, or through incomplete backups. D1 recovery cannot restore facts it never received. Retention of bodies, check IDs, receipts and frontiers is part of replay correctness; no pruning is implemented.
 
-Capacity and D1 operations are centralized in [the ingestion design](CLOUDFLARE_DURABLE_HISTORY.md#bounds-and-capacity). [Local validation](LOCAL_DEMO.md) covers byte identity, delayed pending input, multi-course blocking, independent progress, retry/backoff, abrupt producer death, lock contention, corruption and restore/replay. These are isolated local tests, not a production recovery certification.
+Capacity and D1 operations are centralized in [the ingestion design](CLOUDFLARE_DURABLE_HISTORY.md#bounds-and-capacity). [Local validation](LOCAL_DEMO.md) covers byte identity, delayed pending input, multi-course blocking, independent progress, retry/backoff, abrupt producer death, lock contention, corruption and restore/replay. These tests use isolated local databases; production recovery objectives remain unverified.

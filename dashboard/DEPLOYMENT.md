@@ -4,7 +4,7 @@ This runbook updates the existing standalone dashboard Worker without changing i
 
 ## Inputs and preflight
 
-Keep account/resource mappings, endpoint and deployment versions in private operator records. Required bindings are `DB` for history and the secret `DASHBOARD_READ_TOKEN`, distinct from the ingestion token. Local Wrangler examples do not identify production resources.
+Keep account/resource mappings, the endpoint and deployment versions in private deployment records. Required bindings are `DB` for history and the secret `DASHBOARD_READ_TOKEN`, distinct from the ingestion token. Local Wrangler examples do not identify production resources.
 
 Use an immutable reviewed Git commit with successful Ubuntu CI. Verify local/remote source parity. Preserve the current deployed version, runtime settings and bindings before changing traffic.
 
@@ -23,8 +23,8 @@ Use existing observations. A dashboard release needs no new database, migration,
 
 ## Credentials and rollback
 
-Use the existing token for routine updates. Enter it through a private masked interface, not command arguments or logs. Rotation is separate. If rollback crosses a previous rotation, verify the old version's secret bindings before activating it; do not accidentally restore an obsolete credential.
+Use the existing token for routine updates. Enter it through a private masked interface, not command arguments or logs. If a rollback crosses a token rotation, verify the old version's secret bindings before activation so it does not restore an obsolete credential.
 
-Reactivate the preserved known-good version after checking runtime/binding compatibility. Preserve D1 and ingestion, repeat authentication/source/history checks, and record the outcome. Deleting the Worker or database is not routine rollback. Route containment for an exposure is a separate operational decision.
+Reactivate the known-good version after checking runtime and binding compatibility. Preserve the Worker, D1 and ingestion; repeat authentication, source and history checks, then record the outcome. If a credential is exposed, address access containment and rotation separately.
 
 The dashboard has no mutation routes, but its D1 binding is not a read-only database principal. Fixed queries and code review remain security boundaries. See [historical recovery](../docs/CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery).
