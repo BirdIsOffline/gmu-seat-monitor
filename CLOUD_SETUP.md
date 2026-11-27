@@ -11,12 +11,27 @@ This guide covers live polling, notifications and historical delivery. The [arch
 | `GMU_HISTORY_CAPTURE_ENABLED` | Repository variable; literal `true` enables structured capture |
 | `GMU_HISTORY_CAPTURE_DIR` | Per-run path under `runner.temp`, not a persistent archive |
 | `GMU_HISTORY_ENABLED` | Repository variable; literal `true` enables separate submission |
-| `GMU_HISTORY_PRODUCTION_ENDPOINT` | Repository variable containing the HTTPS ingestion `/v1/checks` endpoint |
+| `GMU_HISTORY_PRODUCTION_ENDPOINT` | GitHub Actions secret containing the unchanged HTTPS ingestion `/v1/checks` endpoint; create before publishing the workflow change |
 | `GMU_HISTORY_PRODUCTION_TOKEN` | GitHub Actions secret available only to submission; matches the Worker's `INGEST_TOKEN` |
 | `DB` | D1 binding on ingestion and dashboard Workers |
 | `DASHBOARD_READ_TOKEN` | Separate dashboard Worker secret, held privately by the reader |
 
 The dispatcher uses an expiring, repository-scoped GitHub credential outside source. Cloudflare management credentials are not required by the monitoring or history clients. Keep real endpoint, account and database mappings outside public examples.
+
+## Endpoint privacy and rollout
+
+The ingestion endpoint belongs in an Actions secret alongside its separate token. A repository variable can appear in the runner's environment listing before Python starts. Masking it inside that same step is too late. The submitter continues to receive the same environment variable; its HTTPS destination, authentication, receipts and payload contract do not change.
+
+For a deployment that currently uses a repository variable:
+
+1. Copy the existing variable value exactly into a repository-level Actions secret named `GMU_HISTORY_PRODUCTION_ENDPOINT`, using a private authenticated interface or protected standard input. Do not echo it, place it in command arguments, or rotate the ingestion token. Verify the secret name exists; GitHub does not return secret values for readback.
+2. Keep the variable during rollout so the current main workflow and any in-flight jobs retain their input. Merge the workflow change only after the secret exists and full CI passes. Do not introduce a variable fallback.
+3. Observe the next naturally scheduled main run. Require five successful course checks, an `INGESTED` outcome and a masked endpoint and token in setup logs. Verify reports contain only fixed outcomes and counts. Do not dispatch extra monitoring or notifications.
+4. Remove the superseded variable only after verification and after all queued and running jobs using older workflow revisions finish. Keep the secret, endpoint and ingestion credentials unchanged. Old workflow revisions referencing the variable are no longer suitable for execution.
+
+If verification fails, preserve both inputs and inspect the command result before retrying anything. Repair secret provisioning or prepare a protected corrective PR; do not restore an unmasked variable reference. Missing configuration fails historical submission without replacing monitoring health. The handoff exists only on temporary runner storage, so an interruption can lose unsubmitted facts.
+
+Secret masking does not erase existing logs. GitHub deletes all logs for a run, including other files in an affected archive; individual lines cannot be selectively erased. Keep a private redacted exposure manifest, then obtain authorization to delete only affected **run log archives**, preserving run records, conclusions and unaffected run archives. Refresh the manifest after rollout because the old workflow can keep producing exposed logs until replaced. Verify affected archives are inaccessible and run records remain available. Inspect separately retained summaries or artifacts before claiming cleanup is complete. GitHub documents [secret handling](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets) and the distinct [workflow-run log API](https://docs.github.com/en/rest/actions/workflow-runs#delete-workflow-run-logs).
 
 ## Polling and workflow behavior
 

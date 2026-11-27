@@ -61,6 +61,10 @@ The operational workflow remains separately dispatched and gated by `GMU_POLLING
 
 The scheduler, five-minute cadence, cache keys, concurrency, history deadlines, course lifecycle and alert logic are unchanged. Dashboard access continues to use a separate token. Application-level rate limiting, per-user dashboard access and production recovery objectives remain documented limitations.
 
+## Operational log privacy
+
+A follow-up review found that the production ingestion endpoint appeared in monitoring setup logs because it used a repository variable. Bark and ingestion tokens remained masked. The endpoint is moved to the secret context in the workflow; application errors and reports retain fixed codes rather than destination values. Create the endpoint secret before publishing that workflow change, then verify natural ingestion and masking before removing the old variable. The [rollout and cleanup procedure](../CLOUD_SETUP.md#endpoint-privacy-and-rollout) preserves run records and separates log cleanup from credential rotation.
+
 ## Validation and operational verification
 
 The [PR CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45961850766) and [merged main CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962142154) each passed all **252 tests with zero failures or skips**. All three corrected Git-ignore tests passed on Ubuntu. Hash-verified Python installation took two seconds on the PR run and one second on main; jobs completed in 52 and 51 seconds within the unchanged five-minute timeout.
