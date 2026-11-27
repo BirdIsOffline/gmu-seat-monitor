@@ -20,9 +20,9 @@ Dashboard HTML is public; history JSON requires its read token. The token stays 
 
 ## Workflow and test isolation
 
-CI runs offline tests and disposable D1 fixtures without live monitoring credentials. Monitoring, history submission and manual Worker deployment are separate. Actions currently use version tags rather than immutable commit pins; pinning is a separate hardening change, not an existing guarantee.
+CI runs offline tests and disposable D1 fixtures without live monitoring credentials. Monitoring, history submission and manual Worker deployment are separate. Both workflows pin actions to verified upstream commit SHAs, use read-only repository permissions and disable checkout credential persistence. Python requirements pin the full dependency graph with artifact hashes; npm uses its committed lockfile. These controls require regular dependency review.
 
-Tests use synthetic tokens and public identifiers; keep real credentials and private data out of fixtures. The [dependency security record](docs/DEPENDENCY_SECURITY_REVIEW.md) documents an earlier remediation. Dependencies still need ongoing review.
+Tests use synthetic tokens and public identifiers; keep real credentials and private data out of fixtures. The [dependency security record](docs/DEPENDENCY_SECURITY_REVIEW.md) documents an earlier remediation. See [repository hardening](docs/REPOSITORY_SECURITY.md) for current audit results, proposed settings and rollback guidance.
 
 ## Reliability and disclosure
 
