@@ -1,8 +1,9 @@
 // Read-only, token-gated dashboard. Deploy as a separate Worker; never reuse the ingestion token.
 // Keep statuses aligned with monitor.py; an offline parity test enforces this.
 export const COURSES = [
-  {"crn": "17582", "name": "IT 304 DL1", "status": "retired"},
-  {"crn": "17593", "name": "IT 341 DL1", "status": "active"}
+  {"crn": "17582", "name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "retired"},
+  {"crn": "17593", "name": "IT 341 DL1", "number": "341", "section": "DL1", "status": "active"},
+  {"crn": "21051", "name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active"}
 ];
 const IDS = COURSES.map(course => course.crn);
 const PLACEHOLDERS = IDS.map(() => '?').join(', ');
@@ -22,10 +23,10 @@ header{display:flex;justify-content:space-between;align-items:center;gap:14px;fl
 .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}button,input{font:inherit;border-radius:8px}input{background:#0c1323;border:1px solid #43516b;padding:12px;color:#fff;min-width:240px;max-width:100%}
 button{background:#255fdb;color:white;border:0;padding:11px 16px;cursor:pointer}button:hover{background:#3579f7}button[aria-pressed="true"]{background:#fff;color:#0b1426}button:disabled{opacity:.5;cursor:wait}
 #rangeButtons{display:flex;gap:8px}#status{min-height:22px;font-size:.88rem;color:#bdd4ff}#status[role="alert"]{color:#ffb4b4}
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.cadence-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:12px}.metric{border:1px solid #28364e;border-radius:12px;padding:16px;background:#111827}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.cadence-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:12px}.metric{border:1px solid #28364e;border-radius:12px;padding:16px;background:#111827}
 .metric .label{color:#a3adbf;font-size:.81rem}.metric strong{font-size:1.6rem;display:block;margin-top:7px;font-variant-numeric:tabular-nums}
 .key{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#aeb9ce}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:#6bc7ff}
-.dot.second{background:#fbbf74}.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
+.dot.second{background:#fbbf74}.dot.third{background:#7addaa}.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
 table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td{padding:11px 7px;border-bottom:1px solid #26334a}th{color:#aeb9ce;font-weight:600}
 .note{color:#c6d1df;font-size:.85rem;line-height:1.5}.scroll{overflow-x:auto}#freshnessState{font-weight:750}#freshnessState.healthy{color:#7addaa}#freshnessState.delayed{color:#ffcd78}#freshnessState.stale{color:#ff9992}#freshnessState.unknown{color:#bac7dc}
 @media(max-width:700px){.metrics,.cadence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px 14px 45px}canvas{height:240px}table{font-size:.75rem}}
@@ -42,7 +43,8 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Stored checks (selected window)</div><strong id="checks">—</strong></div>
 <div class="metric"><div class="label">Recorded check success · all courses</div><strong id="rate">—</strong></div>
 <div class="metric"><div class="label" id="label304">IT 304 · Last stored total</div><strong id="it304">—</strong></div>
-<div class="metric"><div class="label" id="label341">IT 341 · Last stored total</div><strong id="it341">—</strong></div></section>
+<div class="metric"><div class="label" id="label341">IT 341 · Last stored total</div><strong id="it341">—</strong></div>
+<div class="metric"><div class="label" id="label343">IT 343 · Last stored total</div><strong id="it343">—</strong></div></section>
 <section class="panel" style="margin-top:18px" aria-label="Stored history freshness">
 <h2>Active-course freshness · <span id="freshnessState" class="unknown" aria-live="polite">Not checked</span></h2>
 <p id="freshnessAge" class="note">Load history to see active-course observation freshness.</p>
@@ -60,8 +62,8 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Gaps over 15 min</div><strong id="gap15">—</strong></div>
 </div>
 <p class="note">Calculated only between consecutive checks stored in the selected window. Does not measure missed triggers before the first record or after the last record, and does not prove every scheduled run occurred. Durations are in minutes.</p></section>
-<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span><span id="legend304">IT 304 DL1 · 17582</span></span><span><span class="dot second"></span><span id="legend341">IT 341 DL1 · 17593</span></span></div>
-<div class="chart"><canvas id="chart" role="img" aria-label="Line chart of reported total available seats for both courses"></canvas></div>
+<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span><span id="legend304">IT 304 DL1 · 17582</span></span><span><span class="dot second"></span><span id="legend341">IT 341 DL1 · 17593</span></span><span><span class="dot third"></span><span id="legend343">IT 343 DL3 · 21051</span></span></div>
+<div class="chart"><canvas id="chart" role="img" aria-label="Line chart of reported total available seats for configured active and retired courses"></canvas></div>
 <p class="note">These are periodic snapshots, not exact seat-opening times. A line does not guarantee seats remained available between checks. Gaps over 15 minutes break the line. An unknown unreserved count must never be interpreted as seats available for general registration.</p></section>
 <section class="panel"><h2>Latest stored course snapshots · all history</h2><div class="scroll"><table><thead><tr><th>Course</th><th>Monitoring</th><th>Sample time (local)</th><th>Total</th><th>Unreserved</th><th>Classification</th></tr></thead><tbody id="latestRows"><tr><td colspan="6">No data loaded.</td></tr></tbody></table></div></section>
 <section class="panel"><h2>Observed seat increases</h2><div class="scroll"><table><thead><tr><th>Sample time (local)</th><th>Course</th><th>Previous</th><th>New potential</th><th>Type</th></tr></thead><tbody id="eventsRows"><tr><td colspan="5">No data loaded.</td></tr></tbody></table></div><p class="note">Events include retired-course history. They describe sampled increases in potential availability; they do not cause Bark alerts or prove eligibility.</p></section>
@@ -107,7 +109,7 @@ async function load(){
  byId('gap15').textContent=gaps.gaps_over_15_minutes;
  const tbody=byId('latestRows');tbody.replaceChildren();
  for(const course of data.courses){
- const suffix=course.crn==='17582'?'304':'341';const s=course.latest;
+ const suffix=course.number;const s=course.latest;
  const status=course.status==='retired'?'Retired · history only':'Active';
  byId('label'+suffix).textContent=course.name+' · '+status+' · Last stored total';
  byId('it'+suffix).textContent=s?pretty(s.total_available):'—';
@@ -130,7 +132,7 @@ function drawChart(){
  ctx.font='12px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#30405b';ctx.fillStyle='#b5bfce';
  for(let i=0;i<=3;i++){const y=top+plotH*i/3;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(width-right,y);ctx.stroke();ctx.fillText(String(Math.round(ymax*(3-i)/3)),5,y+4)}
  for(let i=0;i<=4;i++){const x=left+plotW*i/4;const stamp=new Date(start+(now-start)*i/4);ctx.fillText(activeRange==='24h'?stamp.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):stamp.toLocaleDateString([],{month:'short',day:'numeric'}),Math.max(2,x-27),height-9)}
- for(const [crn,color] of [['17582','#6bc7ff'],['17593','#fbbf74']]){
+ for(const [crn,color] of [['17582','#6bc7ff'],['17593','#fbbf74'],['21051','#7addaa']]){
  const points=samples.filter(s=>s.crn===crn).sort((a,b)=>a.observed_at_utc.localeCompare(b.observed_at_utc));
  ctx.lineWidth=2.5;ctx.strokeStyle=color;let previous=null;
  for(const p of points){const ms=new Date(p.observed_at_utc).getTime();if(!Number.isFinite(ms)||ms<start||ms>now||p.total_available===null){previous=null;continue}

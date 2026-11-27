@@ -22,7 +22,7 @@ def main(endpoint):
         capture = CheckCapture(tmp)
         # Both-active synthetic fixture preserves historical partial-check coverage.
         with (patch.object(monitor, "COURSES", {
-                crn: dict(course, status="active") for crn, course in monitor.COURSES.items()}),
+                crn: dict(course, status="active") for crn, course in monitor.COURSES.items() if crn in ("17582", "17593")}),
               patch.object(monitor, "get_section", side_effect=[
                 {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved; PRIVATE_TEXT"},
                 monitor.SearchError("synthetic failure")]) as fetch,

@@ -512,3 +512,22 @@ test("retired IT304 historical ingestion and idempotent replay preserve observat
   assert.deepEqual((await rows("observations")).filter(o => o.crn === "17582"), original);
   assert.deepEqual(await rows("opening_events"), events);
 });
+
+
+test("IT343 DL3 reserved-only history and opening preserve other course timelines", async () => {
+  const newCourse = changes => course({crn:"21051",course_number:"343",section:"DL3",total_available:16,
+    reserved_summary:{unreservedAvailable:0,reservedAvailable:16},...changes});
+  const first=payload({observations:[course(),course({crn:"17593",course_number:"341"}),newCourse()]});
+  assert.equal((await send(first)).status,200);
+  const old=(await rows("observations")).filter(o=>o.crn!=="21051");
+  assert.deepEqual(await stats(),[1,3,0]);
+  const next=payload({executed_at_utc:"2026-11-09T00:05:00.000000+00:00",observations:[newCourse()]});
+  assert.equal((await send(next)).status,200);assert.equal((await rows("opening_events")).length,0);
+  const opening=payload({executed_at_utc:"2026-11-09T00:10:00.000000+00:00",
+    observations:[newCourse({reserved_summary:{unreservedAvailable:1,reservedAvailable:15}})]});
+  assert.equal((await send(opening)).status,200);assert.equal((await send(opening)).status,200);
+  assert.deepEqual((await rows("observations")).filter(o=>o.crn!=="21051"),old);
+  assert.equal((await rows("opening_events")).length,1);
+  assert.deepEqual((await rows("observations")).filter(o=>o.crn==="21051").map(o=>[o.section,o.classification]),
+    [["DL3","reserved_only"],["DL3","reserved_only"],["DL3","unreserved"]]);
+});

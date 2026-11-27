@@ -28,6 +28,7 @@ function mockDb() {
               if (sql.includes('FROM observations')) return { results: [
                 { crn: '17582', observed_at_utc: '2026-11-10T20:05:18.252629+00:00', total_available: 0, unreserved_available: null, classification: 'full' },
                 { crn: '17593', observed_at_utc: '2026-11-10T20:05:18.252629+00:00', total_available: 3, unreserved_available: null, classification: 'unknown' },
+                { crn: '21051', observed_at_utc: '2026-11-10T20:05:18.252629+00:00', total_available: 16, unreserved_available: 0, classification: 'reserved_only' },
               ] };
               return { results: [] };
             },
@@ -68,7 +69,7 @@ test('read-only API returns bounded, fixed-query course data', async () => {
   assert.equal(data.health.latest_overall, '2026-11-10T20:05:18.252629+00:00');
   assert.ok(Number.isFinite(Date.parse(data.generated_at_utc)));
   assert.ok(['healthy','delayed','stale'].includes(data.freshness.state));
-  assert.equal(data.samples.length, 2);
+  assert.equal(data.samples.length, 3);
   assert.equal(data.samples[1].classification, 'unknown');
   assert.equal(data.samples[1].unreserved_available, null);
   assert.deepEqual(data.events, []);
@@ -80,6 +81,7 @@ test('read-only API returns bounded, fixed-query course data', async () => {
   assert.ok(calls.every(call => call.args.every(arg => typeof arg === 'string')));
   assert.equal(calls[1].args[0], '17582');
   assert.equal(calls[1].args[1], '17593');
+  assert.equal(calls[1].args[2], '21051');
 });
 
 test('unknown periods and mutation methods are not accepted', async () => {
@@ -178,7 +180,7 @@ const observed = (crn, minutes, at = now) => ({ crn,
   unreserved_available: null, classification: 'unknown' });
 
 test('retired course is history-only and never a stale active target', () => {
-  const data = monitoringSummary([observed('17582', 10000), observed('17593', 5)], now);
+  const data = monitoringSummary([observed('17582', 10000), observed('17593', 5), observed('21051', 5)], now);
   assert.equal(data.courses[0].status, 'retired');
   assert.deepEqual(data.courses[0].freshness, { state: 'retired', age_minutes: null });
   assert.equal(data.courses[0].latest.total_available, 3);
@@ -186,16 +188,16 @@ test('retired course is history-only and never a stale active target', () => {
 });
 
 test('fresh retired observations cannot mask a stale or missing active course', () => {
-  assert.equal(monitoringSummary([observed('17582', 0), observed('17593', 30)], now).freshness.state, 'stale');
+  assert.equal(monitoringSummary([observed('17582', 0), observed('17593', 30), observed('21051', 5)], now).freshness.state, 'stale');
   assert.equal(monitoringSummary([observed('17582', 0)], now).freshness.state, 'no_data');
   assert.equal(monitoringSummary([], now).freshness.state, 'no_data');
 });
 
 test('only active courses determine missing, clock-error and worst-course freshness', () => {
-  const bothActive = COURSES.map(c => ({ ...c, status: 'active' }));
+  const bothActive = COURSES.filter(c=>c.crn!=='21051').map(c => ({ ...c, status: 'active' }));
   assert.equal(monitoringSummary([observed('17582', 30), observed('17593', 5)], now, bothActive).freshness.state, 'stale');
   assert.equal(monitoringSummary([observed('17593', 5)], now, bothActive).freshness.state, 'no_data');
-  assert.equal(monitoringSummary([observed('17582', -5), observed('17593', 5)], now).freshness.state, 'healthy');
+  assert.equal(monitoringSummary([observed('17582', -5), observed('17593', 5), observed('21051', 5)], now).freshness.state, 'healthy');
   assert.equal(monitoringSummary([observed('17593', -5)], now).freshness.state, 'clock_error');
 });
 
@@ -233,38 +235,38 @@ test('real SQL preserves retired samples/events, with latest snapshot outside ch
   const { sql, db, add } = sqliteFixture();
   try {
     const old = add(1,'17582',8*24*60);
-    add(2,'17582',30);add(3,'17593',5);
+    add(2,'17582',30);add(3,'17593',5);add(4,'21051',5);
     sql.prepare('INSERT INTO opening_events VALUES (?, ?, ?, ?, ?)').run(2,new Date(Date.now()-30*60000).toISOString(),0,3,'possible_increase');
     const before = JSON.stringify(sql.prepare('SELECT * FROM observations').all());
     for (const range of ['24h','7d']) {
       const data = await (await worker.fetch(apiRequest(range), { DB:db, DASHBOARD_READ_TOKEN:token })).json();
-      assert.equal(data.health.total,2);
-      assert.equal(data.samples.length,2);
+      assert.equal(data.health.total,3);
+      assert.equal(data.samples.length,3);
       assert.equal(data.events[0].crn,'17582');
       assert.equal(data.courses[0].status,'retired');
       assert.equal(data.freshness.state,'healthy');
       assert.notEqual(data.courses[0].latest.observed_at_utc,old);
-      assert.equal(data.cadence.measured_intervals,1);
+      assert.equal(data.cadence.measured_intervals,2);
     }
     assert.equal(JSON.stringify(sql.prepare('SELECT * FROM observations').all()),before);
     // A retired course can age out of both chart windows and still retain its last stored snapshot.
     sql.prepare('DELETE FROM opening_events').run();
     sql.prepare('DELETE FROM observations WHERE observation_id=2').run();
     const data = await (await worker.fetch(apiRequest('7d'), { DB:db, DASHBOARD_READ_TOKEN:token })).json();
-    assert.equal(data.samples.length,1);
+    assert.equal(data.samples.length,2);
     assert.equal(data.courses[0].latest.observed_at_utc,old);
     assert.equal(data.courses[0].freshness.state,'retired');
-    assert.equal(JSON.parse(before).length,3);
+    assert.equal(JSON.parse(before).length,4);
   } finally { sql.close(); }
 });
 
 test('real SQL cannot use a fresh retired-only check to mark active monitoring healthy', async () => {
   const { sql, db, add } = sqliteFixture();
   try {
-    add(1,'17593',30);add(2,'17582',0);
+    add(1,'17593',30);add(2,'17582',0);add(3,'21051',5);
     const before = JSON.stringify(sql.prepare('SELECT * FROM observations').all());
     const data = await (await worker.fetch(apiRequest('24h'), { DB:db, DASHBOARD_READ_TOKEN:token })).json();
-    assert.equal(data.health.total,2);assert.equal(data.health.success,2);
+    assert.equal(data.health.total,3);assert.equal(data.health.success,3);
     assert.equal(data.freshness.state,'stale');
     assert.equal(data.courses[0].freshness.state,'retired');
     assert.equal(JSON.stringify(sql.prepare('SELECT * FROM observations').all()),before);
@@ -275,11 +277,13 @@ test('browser rendering labels retired history, computes counts, and ages only a
   const { db } = mockDb();
   const html = await (await worker.fetch(new Request(base+'/'), {})).text();
   const data = await (await worker.fetch(apiRequest('24h'), { DB:db, DASHBOARD_READ_TOKEN:token })).json();
-  Object.assign(data,monitoringSummary([observed('17582',10000),observed('17593',5)],now));
+  Object.assign(data,monitoringSummary([observed('17582',10000),observed('17593',5),{...observed('21051',5),total_available:16,unreserved_available:0,classification:'reserved_only'}],now));
+  data.samples=COURSES.flatMap(c=>[5,1].map(minutes=>({...observed(c.crn,minutes,Date.now()),total_available:c.crn==='21051'?16:3})));
+  const strokes=[];
   const elements = new Map();
   const element = () => ({ textContent:'', children:[], hidden:false,
     appendChild(child){this.children.push(child)},replaceChildren(){this.children=[]},
-    setAttribute(){},addEventListener(){},getContext(){return { scale(){},clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillText(){} }} });
+    setAttribute(){},addEventListener(){},getContext(){return { scale(){},clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){strokes.push(this.strokeStyle)},fillText(){} }} });
   const get = id => {if(!elements.has(id))elements.set(id,element());return elements.get(id)};
   let elapsed = 0, requests = 0;
   const context = vm.createContext({ document:{ getElementById:get,createElement:element,querySelectorAll:()=>[] },
@@ -289,11 +293,53 @@ test('browser rendering labels retired history, computes counts, and ages only a
   await vm.runInContext('load()',context);
   assert.match(get('label304').textContent,/Retired.*history only/);
   assert.match(get('legend341').textContent,/Active/);
-  assert.match(get('coverage').textContent,/1 active \/ 1 retired/);
-  assert.equal(get('latestRows').children.length,2);
+  assert.match(get('legend343').textContent,/IT 343 DL3.*Active/);
+  assert.match(get('label343').textContent,/IT 343 DL3.*Active/);
+  assert.equal(get('it343').textContent,'16');
+  for(const color of ['#6bc7ff','#fbbf74','#7addaa'])assert.ok(strokes.includes(color),'missing chart series '+color);
+  assert.match(get('coverage').textContent,/2 active \/ 1 retired/);
+  assert.equal(get('latestRows').children.length,3);
   assert.equal(get('latestRows').children[0].children[1].textContent,'Retired · history only');
   assert.equal(get('freshnessState').textContent,'Healthy');
   elapsed=11*60000;vm.runInContext('paintFreshness()',context);
   assert.equal(get('freshnessState').textContent,'Stale');
   assert.equal(requests,1);
+});
+
+
+test('IT343 must have a real observation before active freshness can be healthy', () => {
+  assert.equal(monitoringSummary([observed('17593',1)],now).freshness.state,'no_data');
+  assert.equal(monitoringSummary([observed('17593',1),observed('21051',16)],now).freshness.state,'stale');
+  assert.equal(monitoringSummary([observed('17593',12),observed('21051',1)],now).freshness.state,'delayed');
+  const result=monitoringSummary([observed('17582',10000),observed('17593',1),observed('21051',1)],now);
+  assert.equal(result.freshness.state,'healthy');
+  assert.equal(result.courses.filter(c=>c.status==='active').length,2);
+});
+
+test('IT343 missing data is not filled with the reference snapshot or treated as zero', async () => {
+  const { db,sql }=sqliteFixture();
+  const data=await (await worker.fetch(apiRequest('24h'),{DB:db,DASHBOARD_READ_TOKEN:token})).json();
+  const target=data.courses.find(c=>c.crn==='21051');
+  assert.equal(target.latest,null);assert.equal(target.status,'active');
+  assert.equal(target.freshness.state,'no_data');assert.equal(data.freshness.state,'no_data');
+  assert.deepEqual(data.samples,[]);sql.close();
+});
+
+test('real SQL returns IT343 DL3 samples and events without losing other course history', async () => {
+  const {sql,db,add}=sqliteFixture();
+  try {
+    add(1,'17582',30);add(2,'17593',2);add(3,'21051',1);
+    sql.prepare('UPDATE observations SET total_available=16,unreserved_available=0,classification=? WHERE crn=?').run('reserved_only','21051');
+    add(4,'21051',0);
+    sql.prepare('UPDATE observations SET total_available=16,unreserved_available=1,classification=? WHERE observation_id=4').run('unreserved');
+    sql.prepare('INSERT INTO opening_events VALUES (?, ?, ?, ?, ?)').run(4,new Date().toISOString(),0,1,'unreserved_increase');
+    const before=JSON.stringify(sql.prepare('SELECT * FROM observations').all());
+    const data=await (await worker.fetch(apiRequest('7d'),{DB:db,DASHBOARD_READ_TOKEN:token})).json();
+    assert.equal(data.samples.length,4);assert.equal(data.events[0].crn,'21051');
+    const target=data.courses.find(c=>c.crn==='21051');
+    assert.equal(target.section,'DL3');assert.equal(target.latest.classification,'unreserved');
+    assert.equal(target.latest.unreserved_available,1);
+    assert.ok(data.samples.some(s=>s.crn==='21051'&&s.classification==='reserved_only'&&s.unreserved_available===0));assert.equal(data.freshness.state,'healthy');
+    assert.equal(JSON.stringify(sql.prepare('SELECT * FROM observations').all()),before);
+  } finally {sql.close()}
 });

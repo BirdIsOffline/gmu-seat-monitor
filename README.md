@@ -10,28 +10,35 @@ GMU Seat Monitor checks public George Mason University course listings for speci
 
 A separate Cloudflare Worker stores historical observations in D1. An independently deployed, token-protected dashboard displays seat history, monitoring cadence, check results, and data freshness.
 
-The Spring 2027 configuration has **one active target and one retired course**:
+The Spring 2027 configuration has **two active targets and one retired course**:
 
 | Course | CRN | Status | Behavior |
 | --- | --- | --- | --- |
 | IT 304 DL1 | 17582 | Retired | Historical observations and dashboard history only; no live lookups or seat alerts |
 | IT 341 DL1 | 17593 | Active | Existing polling, seat classification and notification behavior |
+| IT 343 DL3 | 21051 | Active | Same reservation-aware checks and alerts; exact DL3 matching |
 
 Course status is an explicit `active` or `retired` field in `monitor.py` and the
 standalone dashboard's `COURSES` list. An offline parity test keeps the two
 configurations aligned. Retiring a course does not remove cached snapshots,
 observations or opening events, and historical ingestion still accepts delayed
 records and unchanged retries for either course. Synthetic tests and demos may
-explicitly activate both courses to retain historical regression coverage.
+explicitly activate the original two courses to retain historical regression coverage.
+
+IT 343 is **IT Project Management**, taught by Debra Garcia, Online, Monday
+7:20 PM–10:00 PM (operator-supplied course details). The reference snapshot of
+16 total seats, zero unreserved and 16 reserved seats is **not** stored as a
+production observation. Reserved-only inventory does not generate an opening
+alert. Only real approved lookups establish its monitoring/history state.
 
 ## Features
 
 - **Exact section matching:** validates semester, subject, course number, section, and CRN against the published catalog.
 - **Reservation-aware detection:** distinguishes explicitly unreserved seats from reserved-only inventory. When reservation detail is unavailable, potential availability is marked as uncertain.
-- **Change-based push alerts:** compares current and previous observations to suppress unchanged, decreasing, and known reserved-only states.
+- **Change-based push alerts:** compares current and previous observations to suppress unchanged, decreasing, and known reserved-only states. Actionable IT 341 and IT 343 openings request Bark `sound=alarm`, `call=1`, `level=critical`, and `volume=10`; ordinary phone tests retain their existing defaults.
 - **Automated execution:** external five-minute dispatch triggers a GitHub Actions monitoring job; scheduled execution is best-effort.
 - **Historical storage:** separate authenticated Cloudflare Worker records public course-level checks, observations, and opening events in D1.
-- **Analytics dashboard:** separate read-token-protected Worker retains both courses in 24-hour and 7-day history, labels retired snapshots, and derives monitoring freshness from active-course observations only.
+- **Analytics dashboard:** separate read-token-protected Worker retains all three courses in 24-hour and 7-day history, labels retired snapshots, and derives monitoring freshness from active-course observations only.
 - **Automated tests:** offline Python and JavaScript tests cover classification, alert decisions, persistence, Worker endpoints, and failure cases.
 
 ## Architecture

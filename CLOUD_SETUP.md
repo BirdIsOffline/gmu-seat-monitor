@@ -2,7 +2,7 @@
 
 The monitor uses a GitHub Actions workflow, an externally configured dispatch schedule, Bark for iPhone notifications, and optional Cloudflare historical storage.
 
-The current source configuration checks **IT 341 DL1 (CRN 17593)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
+The current source configuration checks **IT 341 DL1 (CRN 17593)** and **IT 343 DL3 (CRN 21051)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
 
 ## Prerequisites
 
@@ -25,6 +25,28 @@ The operational workflow is [`.github/workflows/seat-monitor.yml`](.github/workf
 
 To pause polling, disable external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the operational workflow.
 
+## Adding IT 343 DL3
+
+The source configuration now has **two active targets and one retired course**.
+Each target declares `number`, `section`, `name` and `status` in `monitor.py`;
+`get_section()` verifies term, subject, number, CRN and that exact section.
+Live capture derives the same section from the configured identity rather than
+assuming DL1. The dashboard mirrors these fields, guarded by an offline parity test.
+
+IT 343 uses the unchanged alert policy. The supplied 16-total / 0-unreserved /
+16-reserved snapshot is a reference and synthetic test fixture only. Do not seed
+`seat_state.json`, D1, or replay payloads from it. No data is displayed for IT 343
+until a real completed lookup is captured. Until then active-course freshness is
+`no_data`; a recent IT 341 observation alone cannot make both targets healthy.
+
+After separate release approval, publish the monitor/capture changes and require
+full Ubuntu CI, then separately deploy the updated dashboard using its existing
+binding and read token. The ingestion Worker and schema already support DL3;
+**no ingestion deployment, migration, new credential or polling-frequency change**
+is required. Preserve all IT 304/341 records and the existing approval/history
+opt-ins. Do not manually dispatch monitoring or insert reference records as a
+shortcut to verification.
+
 ## Course retirement and release
 
 - `monitor.py` defines each course's `status`: `active` enables the existing lookup
@@ -37,8 +59,8 @@ To pause polling, disable external dispatch and set `GMU_POLLING_APPROVED=false`
   retired, the monitor exits without catalog requests or history capture.
 - Status is current configuration, not a historical fact added to old payloads.
   Ingestion validation, original UUIDs, retry bytes and event calculations remain
-  unchanged for both courses. Do not delete D1 rows, cache entries or backups.
-- Dashboard charts/events retain both course histories in the selected window.
+  unchanged for existing courses; the existing generic historical validators also accept IT 343 DL3. Do not delete D1 rows, cache entries or backups.
+- Dashboard charts/events retain all three course histories in the selected window.
   Latest stored snapshots also remain visible when older than that window.
   Retired totals are labelled history-only, not current availability. Freshness
   uses the oldest latest active-course observation across all history; fresh
@@ -55,7 +77,7 @@ execution is still using the previous two-active-course source. Keep the existin
 external cadence, approval gate, Bark secret and history opt-ins unchanged.
 Separately deploy only the reviewed dashboard source using its existing DB
 binding and read token; no ingestion Worker deployment or schema migration is
-needed. Then inspect an authorized check for one IT 341 lookup, one retired
+needed. Then inspect an authorized check for one IT 341 lookup and one IT 343 DL3 lookup, one retired
 health row, unchanged IT 304 history, and correct dashboard freshness. No live
 check or Cloudflare deployment is authorized merely by editing these files.
 
@@ -71,6 +93,21 @@ History recording uses separate authenticated Cloudflare services and is not req
 - [Historical dashboard deployment](dashboard/DEPLOYMENT.md)
 
 Keep ingestion credentials separate from the dashboard read token. GitHub source changes do not automatically redeploy either Cloudflare Worker.
+
+## Actionable Bark alert settings
+
+Qualifying openings for both active courses request `sound=alarm`, `call=1`,
+`level=critical`, and `volume=10`. The `call` and `volume` values are serialized
+as strings following the [Bark API V2 contract](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md).
+Reservation-aware decisions, duplicate suppression, titles, message bodies,
+request timeout and delivery-error handling are unchanged. Retired IT 304 never
+enters the live alert path. The explicit phone-test mode retains its existing
+`timeSensitive` defaults and does not request these actionable-alert options.
+
+Phone playback has not been tested by these offline checks. Critical behavior
+requires the appropriate Bark/iOS permission; sound behavior depends on device
+settings and app support. See the [official parameters](https://github.com/Finb/Bark/blob/master/docs/en-us/params.md).
+Do not send a live test without separate authorization.
 
 ## Operational constraints
 

@@ -26,7 +26,7 @@
 
 **Reserved vs. general seats.** A positive total seat count alone is not proof that a student can enroll. When a reservation summary is returned, an alert requires an explicit positive count of unreserved seats. If reservation metadata is missing, results are marked *potentially available* and require manual verification.
 
-**Course lifecycle.** Explicit active/retired status excludes IT 304 from new lookups and seat notifications while preserving cached state, historical ingestion, observations and events. IT 341 retains the existing alert rules. The standalone dashboard mirrors statuses under a CI parity guard and calculates active freshness independently of retired history.
+**Course lifecycle.** Explicit active/retired status excludes IT 304 from new lookups and seat notifications while preserving cached state, historical ingestion, observations and events. IT 341 and the new IT 343 DL3 target use the same existing alert rules. Catalog matching and live capture derive each course’s exact configured section. The standalone dashboard mirrors statuses under a CI parity guard and calculates active freshness independently of retired history.
 
 **Noise reduction.** The latest alert policy reports increases in candidate seats (0→1, 1→2, etc.), not class closure, reserved-only changes, or unrelated changes.
 

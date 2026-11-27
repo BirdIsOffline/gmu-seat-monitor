@@ -269,7 +269,7 @@ HistoryOutbox(sys.argv[1]).drain(HungClient(), clock=lambda: 1000)
     def test_capture_and_bark_failures_do_not_change_monitoring_or_history(self):
         current = {"seatsAvailable": 1, "reservedSeatSummary": "1 of 10 unreserved"}
         state = {"17582": {"seatsAvailable": 0}}
-        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "status": "active"}}),
+        with (patch.object(monitor, "COURSES", {"17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "active"}}),
               patch.object(monitor, "get_section", return_value=current) as lookup,
               patch.object(monitor, "notify", return_value=False) as bark,
               patch.object(monitor, "save_state"), patch.object(monitor.time, "sleep"),
