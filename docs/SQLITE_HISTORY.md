@@ -1,9 +1,6 @@
-# SQLite historical seat tracking — Phase 3, Part 1
+# Local SQLite history reference
 
-This is an offline library and synthetic demonstration. `monitor.py`,
-`health_runner.py`, the live Actions workflow, cron-job.org, and Bark behavior
-are unchanged. No production entry point imports the history module. The
-implementation uses Python's built-in `sqlite3`; it adds no dependencies.
+`seat_history.py` provides the local transactional history model and an independent reference for Worker parity tests. It uses Python's built-in SQLite and adds no dependency. Its validation types are reused by capture, but production persistence uses Worker/D1 rather than a SQLite file on an Actions runner.
 
 ## Schema and relationships
 
@@ -32,6 +29,8 @@ these additional invariants.
 
 ## Recording public observations
 
+The following is a synthetic local API example, not catalog availability or production ingestion.
+
 ```python
 from datetime import datetime, timezone
 from seat_history import CourseObservation, SeatHistory
@@ -55,8 +54,7 @@ print(history.openings_by_day("202710", "17582"))
 
 The caller records a completed check, supplying its UTC execution/sample time
 (any aware datetime is normalized to UTC) and measured duration. All course
-observations in that check share the timestamp. A future live adapter may need
-individual course sample times if lookups span meaningful intervals. Successful
+observations in that check share the timestamp. The deployed capture uses cycle-start time for all observations; individual lookup timestamps would require a protocol change. Successful
 checks require observations. A partially failed check can include successful
 course observations via `record_check(..., status="failed",
 error_code="COURSE_LOOKUP_FAILED")`. Failed courses have no fabricated observations.
@@ -132,30 +130,11 @@ These are observed increases between periodic samples, not exact opening times.
 An opening may occur any time between samples; brief openings can be missed.
 Long gaps and failed checks reduce coverage. One count increase is one event,
 even if multiple seats appear. No rate per wall-clock hour or predictive claim
-is made. A future dashboard can display course timelines, reserved eligibility
-labels, check health, coverage gaps, and daily observed event counts through a
-read-only API. It should retain these qualifications and paginate large histories.
+is made. The deployed dashboard exposes bounded timelines, classification, health and coverage information. Daily analytics remain available through this local library rather than a promise of an additional dashboard view.
 
 ## Offline validation
 
-From the repository root, using Python 3.12:
-
-```bash
-python -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python -m compileall -q monitor.py setup_bark.py health_runner.py seat_history.py demo_history.py tests
-.venv/bin/python monitor.py --demo
-.venv/bin/python demo_history.py
-```
-
-The SQLite demo creates and removes a temporary database containing synthetic
-facts only. It prints four completed checks, three successes, one failure, 75%
-success, six observations, and one event: IT 304 unreserved availability 0 → 1.
-IT 341 reserved-only total availability 9 → 10 produces no event. It also prints
-latest availability, histories, and daily SQL aggregates. Tests use temporary
-databases; the demo test blocks HTTP requests and notification calls. Python CI
-runs both demos, syntax checks, and all tests. The operational workflow is unchanged.
+See [local tests and demonstrations](LOCAL_DEMO.md). `demo_history.py` creates a temporary synthetic database and exercises aggregate statistics, independent course histories and reservation-aware events. The demo blocks live requests and removes its temporary state. Fixture counts are examples, not current catalog availability.
 
 ## Privacy and security
 
@@ -170,36 +149,10 @@ identifiers, never secrets. SQL values use parameters.
 SQLite files are unencrypted; protect local file permissions and future storage
 access. Database/journal suffixes are gitignored as a guardrail, not a substitute
 for reviewing commits. Do not commit real observations, publish database backups,
-or expose raw database exceptions to a dashboard. Retention, access controls,
-encryption at rest, backup recovery, and schema migrations must be designed
-before live persistence. No registration or notification functionality is added.
+or expose raw database exceptions to a dashboard. Persistent use of this local library requires explicit retention, access controls, storage protection, backup recovery and schema ownership. It does not issue registration actions or notifications.
 
-## Later persistence architecture (proposal only)
+## Relationship to D1
 
-A file on an ephemeral GitHub Actions runner is **not durable storage**.
+Local SQLite uses a `BEGIN IMMEDIATE` transaction and rejects newly backdated observations per term/CRN. D1 uses one Worker batch and schema 0002 neighbor-repair triggers to accept delayed observations. The HTTP protocol has stricter sanitization, bounded batches and UUID requirements; local and Worker request hashes are not interchangeable.
 
-| Option | Benefits | Limitations |
-| --- | --- | --- |
-| Actions cache | Convenient reuse of the latest small state snapshot | Eviction, immutable keys, stale restores and races; no transactional append or retention guarantee. Unsuitable as the history source of truth. |
-| Workflow artifacts | Useful downloadable per-run audit/export snapshots | Retention expiry, explicit download/selection, multiple competing snapshots, no database transactions across runs. Useful for diagnostics or secondary exports, not the authoritative database. |
-| Durable external storage | Explicit retention, backups, recovery and access control | Requires operational ownership, access configuration and concurrency handling; provider costs must be evaluated before adoption. |
-
-For this small monitor, a practical next step is a **single writer on a persistent
-host with SQLite on its durable local volume**, plus encrypted, versioned backups
-in durable object storage. Use an existing host/free allocation only after
-reviewing storage and recovery guarantees; no paid service is added here. Do not
-share a live SQLite file over a network filesystem. Back up using SQLite's backup
-API, not a blind copy during a write. Test restores and define retention before
-calling it reliable.
-
-If GitHub Actions remains the executor, a small authenticated ingestion service
-can accept public check batches and stable idempotency keys and write to that
-single SQLite owner (or a managed relational database if multiple writers are
-needed). Grant least privilege, serialize writes, require acknowledged commits,
-and record ingestion failures. OIDC/short-lived credentials are preferable where
-supported. A lower-infrastructure alternative is downloading/uploading a SQLite
-snapshot in object storage, but it requires one writer plus conditional object
-version writes, integrity checks, and versioned backups to prevent lost updates;
-it is more fragile than an owning ingestion service. Artifacts can remain
-secondary exports; caches can remain performance aids. None of these live cloud
-persistence paths is implemented in this phase.
+The local schema has no general migration framework. Future local schema changes need explicit upgrade and backup tests. A file on an ephemeral runner is not durable storage. Actions caches are comparison-state aids, and artifacts are temporary diagnostics rather than authoritative history. The selected external persistence and recovery design is documented in [D1 ingestion](CLOUDFLARE_DURABLE_HISTORY.md).

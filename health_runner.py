@@ -1,7 +1,7 @@
 """Run one public-seat check and report its outcome to GitHub Actions.
 
-The existing monitor.py remains the source of seat and Bark notification logic.
-This wrapper adds observability, not additional GMU requests or phone alerts.
+monitor.py owns seat decisions and Bark delivery. This wrapper supervises the
+process and reports lookup health without additional catalog or phone requests.
 """
 
 import json

@@ -1,50 +1,31 @@
-# Term lifecycle and archival
+# Course lifecycle and term archival
 
-## Current source scope
+## Current scope
 
-The public catalog monitor is currently **Spring 2027 only**:
-- `TERM_NAME = "Spring 2027"` in `monitor.py`
-- CRN 17582 = IT 304 DL1, **retired/history-only**; CRN 17593 = IT 341 DL1, **active**; CRN 17599 = IT 343 DL1, **active**; CRN 20981 = IT 343 DL2, **active**; CRN 21051 = IT 343 DL3, **active**
-- `resolve_term_code()` currently requires "spring 2027" in the returned term description
-- `monitor.py` and the standalone `dashboard/worker.js` carry explicit course statuses, checked for parity in CI. Only the four active targets are polled; all five retain historical queries and graphs. Exact CRN and section metadata distinguish the three IT 343 sections. No IT 343 section is retired until the operator confirms registration and approves a status change.
-- Retirement is a reviewed source change with a separate release/deployment step; it does not alter live services by itself. See [retirement and release](../CLOUD_SETUP.md#course-retirement-and-release).
+The [target table](../README.md#section-identity-and-lifecycle) has four active Spring 2027 sections and one retired section. Each identity declares number, section, name and status in monitor and dashboard configuration; CI checks parity.
 
-The Cloudflare/D1 schema stores a `term` as well as a `crn` per course observation. A new term does not inherently erase historical records. However, **the current dashboard is not a multi-semester browser**, and the monitor does not automatically recognize a new term.
+Only active identities are polled or notified. Retirement preserves state, observations, events and queries. The dashboard labels retired history and excludes it from active freshness. Status changes do not rewrite historical facts. No section retires automatically.
 
-## If registration ends or polling permission changes (no new code needed)
+## Retirement and pause
 
-1. Stop the *external scheduler's* five-minute GitHub dispatch. Confirm it no longer submits `mode=check`. Do not delete historical databases or Bark configuration.
-2. Independently disable future live checks by setting the GitHub Actions repository variable `GMU_POLLING_APPROVED` to `false` (or disabling the operational workflow). The workflow's `check-seats` job is gated on that variable.
-3. Confirm in GitHub Actions that checks are no longer running and verify D1 still holds the old history. A past run's "success" does not authorize continuing polling.
-4. Export or archive relevant operational history as needed, without exposing credentials, personal account details, or student records.
-5. Keep offline synthetic demonstrations available for regression testing after live monitoring stops. `python monitor.py --demo`, `python demo_history.py`, and `python demo_live_history.py` do not contact GMU.
-6. For privacy/cost/retention, separately review Cloudflare D1 storage/usage and backups; never destroy history by deleting the production D1 database as part of a routine pause.
+Change a section's status in both configurations, test the active allowlist, health, history preservation and freshness, then release through the normal PR process. Deploy dashboard presentation independently. Reactivation reuses state; missed openings during retirement cannot be reconstructed.
 
-## Reconfigure for another term (proposed, NOT implemented)
+To pause all live requests, stop dispatch and set `GMU_POLLING_APPROVED=false` or disable the operational workflow. Check for remaining runs. Preserve historical storage rather than deleting a database to stop polling. Offline tests remain available after monitoring ends.
 
-Make changes in a new reviewed development branch; **do not overwrite the active Spring 2027 settings or restart polling to test new CRNs**.
+## Another term
 
-1. Confirm university automated-query authorization for the **new term, courses and polling frequency**. If absent, keep all live polling disabled.
-2. Read official course offerings and identify **exact** new term name and CRNs; verify subject, course number and section. The old CRNs must not be reused on assumption.
-3. Refactor to a validated term/course configuration with an explicit `term`, CRNs and section identity and a clear human approval step. Separate the new term's comparison state from old-term snapshots (for example, use `term:crn` for state identity); otherwise a reused CRN could produce a false increase or suppress an alert.
-4. Preserve old records and include a term filter in dashboard queries before displaying new-semester observations. Do not aggregate all historical CRNs as though they identify the same course across semesters.
-5. Test with **mocked**, offline multi-term snapshots: unchanged total, opening, reserved-only change, reused CRN in a new term, missing term, unknown reservation data, and cold start. CI tests must make **zero GMU calls**.
-6. Review operational state-cache behavior, historical ingestion identity, dashboard permission boundaries and secret storage. Do not store real student registration records.
-7. Deploy separately to staging/test environments where feasible; verify rollback; only after review update production monitor configuration. A new monitoring term must be explicitly approved and deployed.
-8. After changing term configuration, verify several checks, saved observations and phone test safely. Do not claim a *genuine seat-opening alert* happened when only the synthetic/test path was exercised.
+Multi-term monitoring is not implemented. D1 records `(term, crn)`, but comparison state is CRN-only and dashboard queries have no term filter. Reused CRNs can mix baselines or histories unless all components are extended together.
 
-## Archived data and offline tests
+Before changing terms:
 
-- Offline tests cover reserved/unreserved classification and notification decisions without live catalog access.
-- Historical D1 records remain separate from the current semester configuration.
-- Archived samples are point-in-time records and should not be represented as live monitoring results.
+- Verify polling permission and exact identities for the new term and cadence.
+- Introduce explicit term configuration, separate comparison state and term-filtered queries.
+- Preserve original rows and replay IDs rather than reinterpreting them as new-term data.
+- Test reused CRNs, multiple sections, cold starts, invalid terms, lifecycle status and reservations offline.
+- Review backups, access and rollback; release monitor and dashboard independently.
 
-## Future roadmap, not a delivered feature
+A successful prior check does not authorize another term's polling. Automatic switching, expiration and retrospective reconstruction are not provided.
 
-- Multi-term metadata and state isolation (course-level active/retired status is implemented for the current term)
-- First-class archived-term selector and read-only historic dashboard
-- Per-term state isolation / CRN reuse regression tests
-- Optional safe expiration / polling pause control after a term ends
-- Documented retention, access-control rotation and operational health alert policy
+## Archives
 
-This document is operational guidance and a plan. It does **not** silently switch semesters, alter GitHub repository variables, contact GMU or add automation.
+Protect exports and recovery evidence. Preserve original IDs: deleting replay identities can change deduplication behavior. Retention must preserve baselines and a tested restore path. See [D1 recovery](CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery) and [operations](../CLOUD_SETUP.md).

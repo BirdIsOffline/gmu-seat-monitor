@@ -208,10 +208,11 @@ class CloudHistoryClient:
 
 
 def persist_best_effort(client, prepared):
-    """Separate boundary for future callers; never replace monitoring's result.
+    """Generic submission boundary; never replace monitoring's result.
 
-    A future adapter must finish normal checks/notifications before invoking this
-    boundary, ideally in a separate process. No production caller is wired here.
+    Callers finish checks and notification handling before invoking this helper
+    within a separate process budget. Production submission uses its dedicated
+    entry point rather than this convenience wrapper.
     """
     if client is None:
         return IngestionResult(False, "DISABLED", 0)
@@ -223,7 +224,7 @@ def persist_best_effort(client, prepared):
 
 
 def capture_completed_best_effort(client, *args, **kwargs):
-    """Future Cloudflare-first boundary from already completed public facts.
+    """Prepare and submit already completed public facts through a generic boundary.
 
     Caller owns the UUID and must retain it/its facts for any later retry. Success
     means a matching D1 commit acknowledgement, never merely local preparation.

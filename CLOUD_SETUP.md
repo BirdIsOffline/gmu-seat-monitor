@@ -1,124 +1,57 @@
-# GMU Seat Monitor — cloud configuration
+# Deployment and operations
 
-The monitor uses a GitHub Actions workflow, an externally configured dispatch schedule, Bark for iPhone notifications, and optional Cloudflare historical storage.
+The deployed system has a GitHub Actions monitor, external five-minute dispatch, Bark delivery, a dedicated ingestion Worker/D1 database and a separate authenticated dashboard Worker. Checked-in Wrangler configuration is for local testing, not a production inventory.
 
-The current source configuration checks **IT 341 DL1 (CRN 17593)** and **IT 343 DL1 (CRN 17599), DL2 (CRN 20981), and DL3 (CRN 21051)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
+## Configuration boundaries
 
-## Prerequisites
+| Setting | Location and purpose |
+| --- | --- |
+| `GMU_POLLING_APPROVED` | Repository variable; literal `true` permits live workflow checks |
+| `BARK_DEVICE_KEY` | GitHub Actions secret for notification delivery |
+| `GMU_HISTORY_CAPTURE_ENABLED` | Repository variable; literal `true` enables structured capture |
+| `GMU_HISTORY_CAPTURE_DIR` | Per-run path under `runner.temp`, not a persistent archive |
+| `GMU_HISTORY_ENABLED` | Repository variable; literal `true` enables separate submission |
+| `GMU_HISTORY_PRODUCTION_ENDPOINT` | Repository variable containing the HTTPS ingestion `/v1/checks` endpoint |
+| `GMU_HISTORY_PRODUCTION_TOKEN` | GitHub Actions secret available only to submission; matches the Worker's `INGEST_TOKEN` |
+| `DB` | D1 binding on ingestion and dashboard Workers |
+| `DASHBOARD_READ_TOKEN` | Separate dashboard Worker secret, held privately by the reader |
 
-- GitHub repository with Actions enabled
-- Python dependencies defined in `requirements.txt`
-- Bark device key stored as a GitHub Actions secret
-- Explicit permission for scheduled automated catalog access
-- Optional, separately configured Cloudflare ingestion Worker and dashboard
+The dispatcher uses an expiring, repository-scoped GitHub credential outside source. Cloudflare management credentials are not required by the monitoring or history clients. Keep real endpoint, account and database mappings outside public examples.
 
-## GitHub Actions
+## Polling and workflow behavior
 
-The operational workflow is [`.github/workflows/seat-monitor.yml`](.github/workflows/seat-monitor.yml). Offline CI is [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+[The monitoring workflow](.github/workflows/seat-monitor.yml) is dispatched with `mode=check` by the external scheduler. It checks the polling gate, restores state, runs `health_runner.py`, validates and caches public seat state, then submits captured observations when both history opt-ins are enabled. History failure has a separate outcome and cannot replace monitoring health.
 
-1. Add `BARK_DEVICE_KEY` under **Settings → Secrets and variables → Actions → Secrets**. Never commit the key to the repository.
-2. In **Actions**, open **GMU seat monitor** and run its `test` mode to check Bark delivery without querying the university catalog.
-3. Confirm automated public-catalog access and polling frequency are permitted before enabling live checks.
-4. Set the repository variable `GMU_POLLING_APPROVED=true` only when authorized.
-5. Use `check` mode to execute a single authorized catalog check.
-6. Configure external dispatch separately to trigger the operational workflow. The reported operational cadence is five minutes; GitHub execution times are best-effort.
+The cadence is five minutes. Dispatch acceptance does not guarantee a job starts or finishes on time. The concurrency group uses `cancel-in-progress: false`; GitHub pending-run handling is not a durable queue of every request. The health runner has a 240-second monitor timeout, the job a five-minute budget, and submission a separate 20-second deadline within the remaining budget.
 
-To pause polling, disable external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the operational workflow.
-
-## Monitoring all three IT 343 sections
-
-The source configuration now has **four active targets and one retired course**.
-Each target declares `number`, `section`, `name` and `status` in `monitor.py`;
-`get_section()` verifies term, subject, number, CRN and that exact section.
-Live capture derives the same section from the configured identity rather than
-assuming DL1. The dashboard mirrors these fields, guarded by an offline parity test.
-
-All three IT 343 sections use the unchanged alert policy. Comparison state, observation identity and event baselines are keyed by CRN (with term in history), never by course number alone. Notifications include the section and CRN. No IT 343 section is retired automatically; wait for explicit registration confirmation and review the status change. The supplied 16-total / 0-unreserved /
-16-reserved snapshot is a reference and synthetic test fixture only. Do not seed
-`seat_state.json`, D1, or replay payloads from it. Each newly added section stays missing until its own real completed lookup is captured. Until all four active targets have valid observations, active-course freshness remains `no_data`; recent observations from other sections cannot hide the missing one.
-
-After separate release approval, publish the monitor/capture changes and require
-full Ubuntu CI, then separately deploy the updated dashboard using its existing
-binding and read token. The ingestion Worker and schema already support all three sections;
-**no ingestion deployment, migration, new credential or polling-frequency change**
-is required. Preserve all existing IT 304, IT 341 and IT 343 records and the existing approval/history
-opt-ins. Do not manually dispatch monitoring or insert reference records as a
-shortcut to verification.
+To pause polling, stop external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the monitoring workflow. Preserve state and history. Offline CI is separate and does not need monitoring credentials.
 
 ## Course retirement and release
 
-- `monitor.py` defines each course's `status`: `active` enables the existing lookup
-  and alert path; `retired` skips that path and preserves the saved snapshot.
-  Unknown or missing status fails validation before polling.
-- Keep the standalone `COURSES` list in `dashboard/worker.js` aligned. CI checks
-  parity; no new build system or external configuration service is required.
-- Health reports mark retired courses as `retired`, not missing or failed. The
-  successful-check denominator includes active courses only. If all courses are
-  retired, the monitor exits without catalog requests or history capture.
-- Status is current configuration, not a historical fact added to old payloads.
-  Ingestion validation, original UUIDs, retry bytes and event calculations remain
-  unchanged for existing courses; the existing generic historical validators also accept IT 343 DL1, DL2 and DL3. Do not delete D1 rows, cache entries or backups.
-- Dashboard charts/events retain all five configured course/section histories in the selected window.
-  Latest stored snapshots also remain visible when older than that window.
-  Retired totals are labelled history-only, not current availability. Freshness
-  uses the oldest latest active-course observation across all history; fresh
-  retired-only records cannot conceal missing or stale active observations.
-  Check success and cadence still describe all stored checks in the window.
-- Reactivating a course requires an explicit reviewed status change in both
-  configurations. It never grants polling permission; `GMU_POLLING_APPROVED`
-  remains mandatory for live workflow checks. Retained comparison state is reused;
-  missed openings during retirement cannot be reconstructed by polling.
+The [target table](README.md#section-identity-and-lifecycle) has four active sections and one retired section. Matching requires the exact term, subject, number, section and CRN. CRNs distinguish sections with the same course number.
 
-After review, publish the monitor/configuration and tests to the workflow's
-configured branch and require successful Ubuntu CI. Confirm no older workflow
-execution is still using the previous target configuration. Keep the existing
-external cadence, approval gate, Bark secret and history opt-ins unchanged.
-Separately deploy only the reviewed dashboard source using its existing DB
-binding and read token; no ingestion Worker deployment or schema migration is
-needed. Then inspect an authorized check for one IT 341 lookup and three independently matched IT 343 lookups, one retired
-health row, unchanged IT 304 history, and correct dashboard freshness. No live
-check or Cloudflare deployment is authorized merely by editing these files.
+Maintain statuses in `monitor.py` and `dashboard/worker.js`; CI verifies parity. Retirement excludes lookups and alerts but preserves state, observations, delayed historical ingestion and events. Invalid status fails validation. All-retired configuration exits without catalog lookups or capture.
 
-If dashboard rollback is necessary, preserve D1 and the monitor's retired status.
-Do not revert to an older target configuration just to restore presentation.
+Release source through a pull request and successful Ubuntu CI. Deploy presentation changes independently using the [dashboard runbook](dashboard/DEPLOYMENT.md). Adding a section under the current protocol needs no ingestion Worker change, migration, credential rotation or cadence change. Verify normal scheduled observations; do not seed state or history from examples.
 
-## Historical ingestion and dashboard
+Freshness uses the oldest latest active observation. A section without real observations remains missing; other samples cannot make the aggregate healthy. Retired sections are excluded. Dashboard rollback must preserve the database and monitoring lifecycle configuration.
 
-History recording uses separate authenticated Cloudflare services and is not required for Bark notifications.
+## Bark notification contract
 
-- [Cloudflare historical ingestion](docs/CLOUDFLARE_DURABLE_HISTORY.md)
-- [Live history adapter](docs/LIVE_HISTORY_ADAPTER.md)
-- [Historical dashboard deployment](dashboard/DEPLOYMENT.md)
+Qualifying candidate increases request `sound=alarm`, `call=1`, `level=critical` and `volume=10`; `call` and `volume` are strings. Titles include section and CRN. Reservation filtering and duplicate suppression precede delivery. The function makes one request with a 15-second timeout and no automatic retry; state persistence can suppress another attempt for a rejected push.
 
-Keep ingestion credentials separate from the dashboard read token. GitHub source changes do not automatically redeploy either Cloudflare Worker.
+Workflow `mode=test` uses the ordinary `timeSensitive` phone-test path rather than actionable alarm settings. Phone tests send real notifications and are deliberate operations, not CI checks. The labelled actionable-alarm test was accepted by Bark, and the operator confirmed successful playback with approximately 20 seconds of persistent ringing. The test did not represent a genuine seat opening. Ringing duration is an observed result, not a configured timing guarantee. Critical playback still depends on Bark/iOS support, permissions and settings.
 
-## Actionable Bark alert settings
+[Official Bark parameters](https://github.com/Finb/Bark/blob/master/docs/en-us/params.md) · [API contract](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md)
 
-Qualifying openings for all four active targets request `sound=alarm`, `call=1`,
-`level=critical`, and `volume=10`. The `call` and `volume` values are serialized
-as strings following the [Bark API V2 contract](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md).
-Reservation-aware decisions, duplicate suppression, titles, message bodies,
-request timeout and delivery-error handling are unchanged. Retired IT 304 never
-enters the live alert path. The explicit phone-test mode retains its existing
-`timeSensitive` defaults and does not request these actionable-alert options.
+## Historical delivery and recovery
 
-Phone playback has not been tested by these offline checks. Critical behavior
-requires the appropriate Bark/iOS permission; sound behavior depends on device
-settings and app support. See the [official parameters](https://github.com/Finb/Bark/blob/master/docs/en-us/params.md).
-Do not send a live test without separate authorization.
+Capture and submission use dedicated opt-ins and production configuration with no staging fallback. Delivery retries submit the sealed UUID/body and never rerun catalog lookups or Bark. A timeout is unconfirmed: D1 may have committed. Rerunning the monitoring job is not a delivery retry.
 
-## Operational constraints
+Disable `GMU_HISTORY_ENABLED` to pause submission without changing ordinary monitoring. Preserve sealed bodies for identical replay. Protect backups and exports; temporary Actions disk is not a durable archive. The [handoff](docs/LIVE_HISTORY_ADAPTER.md), [D1 recovery](docs/CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery) and [optional outbox](docs/HISTORY_RELIABILITY.md) have different durability boundaries.
 
-- A reported seat increase is informational and does not prove an individual student is eligible to enroll.
-- Scheduled jobs may be delayed or skipped. Short-lived availability changes between checks can be missed.
-- GitHub Actions snapshot cache eviction can cause an alert to be repeated after state is lost.
-- Public endpoints may enforce usage limits. Respect university access policies and stop automated requests if denied.
-- Never commit Bark keys, GitHub tokens, Cloudflare secrets, cookies, or student records.
+## Security and deployment separation
 
-See [security](SECURITY.md) and [term lifecycle](docs/TERM_LIFECYCLE.md) for additional safeguards.
+Ingestion and dashboard use separate credentials. Use HTTPS and secret stores; never put credentials in command arguments, URLs, commits or screenshots. Source publication does not deploy Cloudflare automatically. Resource mappings and previous versions belong in private operator records.
 
-### References
-
-- [GMU acceptable-use policy](https://universitypolicy.gmu.edu/policies/acceptable-use-of-technology/)
-- [GitHub Actions workflow dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)
-- [Cloudflare Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+Permission for catalog access and the polling gate remain necessary regardless of CI. Stop on denied access or rate limiting. See [security](SECURITY.md) and [term lifecycle](docs/TERM_LIFECYCLE.md).

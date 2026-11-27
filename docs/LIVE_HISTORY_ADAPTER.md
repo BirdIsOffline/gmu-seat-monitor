@@ -1,54 +1,39 @@
-# Opt-in live observation handoff (disabled)
+# Structured observation handoff
 
-This milestone adds a structured producer and separate historical submission
-adapter. **Nothing is activated by this change.** Ordinary monitoring remains
-`health_runner.py` -> `monitor.py --once`, with the existing Bark decisions,
-`seat_state.json` cache, polling approval and approximately five-minute external
-schedule. Health reporting still uses its existing output parser; historical
-observations never use that parser or the state cache.
+The deployed workflow copies completed public observations into a local per-run handoff and submits them in a separate bounded process. `health_runner.py` supervises the ordinary monitor; historical facts come directly from successful lookup results, not health-log parsing or cached state. Capture and submission each require an explicit opt-in and default off when unset.
 
-The operator reports that migration **0002** and its matching Worker have been
-deployed and tested in **synthetic staging**. No remote verification is performed
-here. That staging database and the recovery-test database are not production
-history stores. This branch does not deploy, change them, set secrets, or contact
-GMU/Bark. `cloudflare/wrangler.toml` remains a local-only configuration.
+The Actions disk is temporary. This protocol preserves original facts while that disk survives; it is not a cross-run durable archive. The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) describes destination durability and [operations](../CLOUD_SETUP.md) owns repository configuration.
 
 ## Configured section identity
 
-The current source targets IT 341 DL1 and IT 343 DL1, DL2 and DL3 as active, retaining IT 304
-DL1 as history-only. Live capture uses the validated configured section, so each IT 343 section retains its own DL1, DL2 or DL3 identity and CRN. Same-number sections cannot overwrite each other’s observations or event baselines. Generic historical payload validation and D1 already
-support all three IT 343 sections; old UUIDs and retry bodies remain unchanged. The new reference seat
-snapshot is used only in synthetic tests, never as a production observation.
+Each successful lookup carries the exact configured section and CRN. The [target table](../README.md#section-identity-and-lifecycle) contains multiple sections of one course; history preserves them independently using `(term, crn)`. Retirement does not invalidate delayed historical facts or existing retry bodies.
 
 ## Architecture and invariants
 
 ```mermaid
 flowchart TD
-    Health[health_runner.py: original monitoring health] --> Monitor[monitor.py: one existing check]
-    Monitor --> GMU[Existing public lookups only]
+    Health[health_runner.py: original monitoring health] --> Monitor[monitor.py: one monitoring cycle]
+    Monitor --> GMU[Original public lookups only]
     GMU --> Completed[Actual completed course snapshots]
-    Completed --> Alert[Existing Bark decisions and seat state]
+    Completed --> Alert[Bark decisions and seat state]
     Completed -. explicit capture opt-in .-> Pending[Sanitized local pending checkpoint]
     Pending --> Seal[Separate submitter: acquire lock and seal once]
     Seal --> Body[Immutable check.json: original UUID/time/body]
     Body --> Worker[Deadline-controlled HTTP subprocess]
-    Worker --> D1[Dedicated production Worker/D1 after future approval]
+    Worker --> D1[Production ingestion Worker and D1]
     Worker --> Report[Separate historical outcome]
 ```
 
 - One `CheckCapture` is created at the beginning of each original monitor cycle,
   before term discovery. It owns exactly one random UUID4 and one UTC sample
   timestamp. This timestamp represents **cycle start**, not the precise instant
-  either seat opened or either lookup completed. Both course observations share
+  a seat opened or any lookup completed. All course observations share
   it, matching the existing check-level API. Duration uses a monotonic clock.
 - `check_once(..., capture=None)` copies each successfully returned snapshot
   directly into the opt-in producer, after that course's Bark decision and
   seat-state persistence, before the existing two-second sleep. No
   requests are added. It never invents a result when `get_section` fails.
-- Both successful courses form one successful check. One failed lookup yields a
-  failed check with only the other course's successful observation. Two failures
-  or term-discovery failure yield a failed check with **zero** observations.
-  Failed/missing courses are never filled from cached state or treated as full.
+- All successful active lookups form one successful check. Any lookup failure makes the check failed while retaining the other successful observations. Complete lookup failure or term-discovery failure yields zero observations. Missing courses are never filled from cached state or treated as full.
 - History initialization, sanitization, checkpoint and finalization exceptions
   are isolated. They print only `CAPTURE_PREPARATION_FAILED`, never the exception
   text, and do not alter seat decisions, state saves, monitor return values, or
@@ -139,7 +124,7 @@ before it was killed. They are not proof that D1 is empty. Even an explicit HTTP
 rejection is conservatively unconfirmed, since an earlier retry may have lost an
 acknowledgement. Bark delivery remains unverified by monitoring health.
 
-The new handoff allows only UUID/time/duration/status/fixed error code and public
+The handoff allows only UUID/time/duration/status/fixed error code and public
 term, subject, course number, section, CRN, total availability and a sanitized
 unreserved count/`unknown` marker. Totals outside the allowed integer range become
 unknown, never zero. Reservation text, unrelated dictionaries, course titles,
@@ -154,7 +139,7 @@ artifacts. No Cloudflare management credential is needed. The HTTP client refuse
 redirects, URL credentials/query strings, non-HTTPS endpoints and ambient
 `.netrc`/cookie/proxy authentication. `--allow-local-http` is explicitly restricted
 to loopback for offline testing. Raw response bodies and exceptions are discarded.
-These rules describe the new historical path; existing monitor seat snapshots,
+These rules describe the historical path; existing monitor seat snapshots,
 Bark messages and health logs retain their existing behavior.
 
 **Delivery is not lossless.** The Actions disk is temporary, not a persistent
@@ -163,61 +148,21 @@ disappears, unsent or unconfirmed original bodies may disappear too. D1 retains
 committed facts, but cannot recover a sample it never received. The optional
 SQLite outbox needs surviving POSIX storage and is not used here. Accept this
 loss window explicitly or design a separately authorized durable capture source
-before activation. Nothing in this adapter makes caches/artifacts durable queues.
+when evaluating stronger capture guarantees. Caches and artifacts are not durable queues.
 
-## Configuration and later activation
+## Configuration and operational control
 
-All gates require the exact lowercase string `true`. Defaults are off.
+The capture and submission gates require literal lowercase `true`; unset defaults are off. Configuration names and secret scopes are listed in [operations](../CLOUD_SETUP.md#configuration-boundaries).
 
-| Setting | Scope and eventual purpose |
-| --- | --- |
-| `GMU_HISTORY_CAPTURE_ENABLED` | Repository variable passed to monitor; enables local structured capture only |
-| `GMU_HISTORY_CAPTURE_DIR` | Monitor environment; workflow uses a unique `runner.temp` directory per run/attempt |
-| `GMU_HISTORY_ENABLED` | Repository variable passed only to the separate submitter; enables HTTP submission |
-| `GMU_HISTORY_PRODUCTION_ENDPOINT` | Repository variable, complete dedicated production HTTPS `/v1/checks` endpoint |
-| `GMU_HISTORY_PRODUCTION_TOKEN` | Future GitHub secret, ingestion-only bearer token for that production Worker |
+The submitter uses only `GMU_HISTORY_PRODUCTION_ENDPOINT` and `GMU_HISTORY_PRODUCTION_TOKEN`. It ignores the generic client's staging/local environment names and never falls back to a synthetic destination. The per-run capture path is generated under `runner.temp` and history bytes are not placed in the alert-state cache or uploaded as artifacts.
 
-The adapter **ignores** the prototype's `GMU_HISTORY_ENDPOINT` and
-`GMU_HISTORY_TOKEN`; there is no staging/default endpoint fallback. Both capture
-and ingestion flags are required by the workflow submission step. No settings or
-secrets are created by this branch. The existing synthetic staging and recovery
-resources must never be used to store actual monitoring history.
-
-Before enabling actual recording, a later authorized operator must:
-
-1. Review this branch, regression results, privacy fields, sampling semantics and
-   the accepted ephemeral-runner loss window. Confirm the unchanged job budget
-   leaves practical time for submission.
-2. Provision/review a **separate production** Worker/D1 binding with migrations
-   0001 + 0002 and the matching Worker; validate authentication, idempotency,
-   quotas and recovery against separately approved disposable synthetic targets.
-   Do not repurpose or modify the existing staging/recovery databases.
-3. Configure the dedicated production endpoint and an ingestion-only secret in
-   the approved secret store. Do not paste tokens into chat or shell arguments.
-4. Under explicit rollout authorization, first enable capture only and review its
-   separate outcomes, then enable submission. Observe acknowledgements and D1
-   receipts independently of monitoring health and Bark. Do not change polling
-   frequency or external scheduler configuration as part of this rollout.
-5. For rollback, turn off `GMU_HISTORY_ENABLED`; disable capture too if desired.
-   Ordinary monitoring continues. Preserve any surviving sealed bodies for
-   separately authorized identical replay; do not regenerate UUIDs to retry.
+To pause delivery, disable `GMU_HISTORY_ENABLED`; capture can be disabled independently. Preserve surviving sealed bodies for exact replay. Do not regenerate UUIDs or rerun monitoring to repair history. Endpoint/secret changes require checking destination identity and receipt scope. A missing local receipt after a remote commit causes a safe identical retry, not proof of missing data.
 
 ## Offline verification
 
-```bash
-python -m unittest discover -s tests -v
-python -m compileall -q monitor.py health_runner.py cloud_history.py seat_history.py history_capture.py history_submit.py demo_live_history.py tests cloudflare/test
-python monitor.py --demo
-python demo_history.py
-python demo_live_history.py
-CLOUDFLARE_SEND_METRICS=false npm test --prefix cloudflare
-CLOUDFLARE_SEND_METRICS=false npm run demo --prefix cloudflare
-node --check cloudflare/src/worker.js
-node --check cloudflare/test/worker.test.js
-node --check cloudflare/demo_timeline.js
-```
+Use the [local validation commands](LOCAL_DEMO.md) for the complete Linux/POSIX suite.
 
-Tests cover two successes, both partial-failure orders, full/term failure,
+Tests cover multi-section success, legacy partial-failure orders, complete/term failure,
 identical alert/state/health behavior, isolated preparation/storage failures,
 explicit default-off gates, sanitization, no extra GMU/Bark requests, local HTTP
 errors, lost acknowledgements/receipts with identical bytes, unexpected client
