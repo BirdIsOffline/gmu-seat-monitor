@@ -15,10 +15,9 @@ GMU/Bark. `cloudflare/wrangler.toml` remains a local-only configuration.
 
 ## Configured section identity
 
-The current source targets IT 341 DL1 and IT 343 DL3 as active, retaining IT 304
-DL1 as history-only. Live capture uses the validated configured section, so IT 343
-is never relabelled DL1. Generic historical payload validation and D1 already
-support DL3; old UUIDs and retry bodies remain unchanged. The new reference seat
+The current source targets IT 341 DL1 and IT 343 DL1, DL2 and DL3 as active, retaining IT 304
+DL1 as history-only. Live capture uses the validated configured section, so each IT 343 section retains its own DL1, DL2 or DL3 identity and CRN. Same-number sections cannot overwrite each other’s observations or event baselines. Generic historical payload validation and D1 already
+support all three IT 343 sections; old UUIDs and retry bodies remain unchanged. The new reference seat
 snapshot is used only in synthetic tests, never as a production observation.
 
 ## Architecture and invariants

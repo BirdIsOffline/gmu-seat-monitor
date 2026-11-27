@@ -19,8 +19,8 @@ outbox is retained and tested, but is unnecessary for this Cloudflare-first path
 
 ## Decision: direct ingestion instead of a pending inbox
 
-The actual workload is two course samples per five-minute completed check,
-approximately 288 checks and 576 observations per day. Historical processing is
+The configured workload is four active course/section samples per five-minute completed check,
+approximately 288 checks and 1,152 observations per day. Historical processing is
 small, deterministic SQL with no external side effects. Normal monitoring and
 Bark already handle live notifications independently.
 
@@ -161,9 +161,9 @@ process deadline and a bounded rate budget. Do not sleep/poll/refetch courses to
 clear history errors. There is no new cron trigger in `wrangler.toml`.
 
 At current cadence, plan for about 288 Worker requests/day plus retries, 288
-check rows, 576 observation rows, UUID/time indexes, receipt indexes and event
+check rows, 1,152 observation rows, UUID/time indexes, receipt indexes and event
 changes. Duplicate upserts also write; delayed samples can delete/recreate up to
-two event edges. **864 base rows/day is not a billable-write estimate**: measure
+two event edges. **1,440 base rows/day is not a billable-write estimate**: measure
 D1 rows read/written and Worker CPU with real staging usage before activation.
 Common planning ceilings are 100,000 Worker requests/day, 10 ms free HTTP Worker
 CPU, 50 D1 queries per free Worker invocation, 5 million D1 rows read/day,
@@ -175,8 +175,8 @@ These are not account-verified entitlements. Check current
 Miniflare tests do not prove live CPU/quotas/latency. The 50-course cap is an input
 bound, not an assurance that every such request fits a free CPU budget.
 
-Storage is unbounded here: approximately 105,120 checks and 210,240 observations
-per year at two active courses and a five-minute cadence, before failures, delayed
+Storage is unbounded here: approximately 105,120 checks and 420,480 observations
+per year at four active targets and a five-minute cadence, before failures, delayed
 submissions and retries. Older two-course history remains retained. Monitor growth; throttle historical imports and leave
 headroom for other workloads. No pruning, automatic paid upgrade or resource
 creation is implemented. Retention must preserve original replay identities,

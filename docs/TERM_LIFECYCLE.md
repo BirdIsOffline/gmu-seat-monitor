@@ -4,9 +4,9 @@
 
 The public catalog monitor is currently **Spring 2027 only**:
 - `TERM_NAME = "Spring 2027"` in `monitor.py`
-- CRN 17582 = IT 304 DL1, **retired/history-only**; CRN 17593 = IT 341 DL1, **active**; CRN 21051 = IT 343 DL3, **active**
+- CRN 17582 = IT 304 DL1, **retired/history-only**; CRN 17593 = IT 341 DL1, **active**; CRN 17599 = IT 343 DL1, **active**; CRN 20981 = IT 343 DL2, **active**; CRN 21051 = IT 343 DL3, **active**
 - `resolve_term_code()` currently requires "spring 2027" in the returned term description
-- `monitor.py` and the standalone `dashboard/worker.js` carry explicit course statuses, checked for parity in CI. Only the two active courses are polled; all three retain historical queries and graphs. Exact section metadata distinguishes DL1 from DL3.
+- `monitor.py` and the standalone `dashboard/worker.js` carry explicit course statuses, checked for parity in CI. Only the four active targets are polled; all five retain historical queries and graphs. Exact CRN and section metadata distinguish the three IT 343 sections. No IT 343 section is retired until the operator confirms registration and approves a status change.
 - Retirement is a reviewed source change with a separate release/deployment step; it does not alter live services by itself. See [retirement and release](../CLOUD_SETUP.md#course-retirement-and-release).
 
 The Cloudflare/D1 schema stores a `term` as well as a `crn` per course observation. A new term does not inherently erase historical records. However, **the current dashboard is not a multi-semester browser**, and the monitor does not automatically recognize a new term.

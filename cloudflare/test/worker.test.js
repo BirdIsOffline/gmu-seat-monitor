@@ -531,3 +531,32 @@ test("IT343 DL3 reserved-only history and opening preserve other course timeline
   assert.deepEqual((await rows("observations")).filter(o=>o.crn==="21051").map(o=>[o.section,o.classification]),
     [["DL3","reserved_only"],["DL3","reserved_only"],["DL3","unreserved"]]);
 });
+
+
+test("same-number IT343 sections retain independent identities, events and replay receipts", async () => {
+  const sections=[["17599","DL1"],["20981","DL2"],["21051","DL3"]];
+  const observations=counts=>sections.map(([crn,section],i)=>course({crn,section,course_number:"343",total_available:16,
+    reserved_summary:{unreservedAvailable:counts[i],reservedAvailable:16-counts[i]}}));
+  const original=payload({observations:[course(),course({crn:"17593",course_number:"341"})]});
+  assert.equal((await send(original)).status,200);
+  const preserved=await rows("observations");
+  const baseline=payload({executed_at_utc:"2026-11-09T00:05:00.000000+00:00",observations:observations([0,0,0])});
+  assert.equal((await send(baseline)).status,200);
+  assert.equal((await rows("opening_events")).length,0);
+  const opening=payload({executed_at_utc:"2026-11-09T00:10:00.000000+00:00",observations:observations([1,0,2])});
+  assert.equal((await send(opening)).status,200);
+  const committed=await rows("observations"),events=await rows("opening_events");
+  assert.equal(events.length,2);
+  assert.deepEqual(new Set(events.map(e=>committed.find(o=>o.observation_id===e.observation_id).crn)),new Set(["17599","21051"]));
+  for(const [crn,section] of sections){
+    const timeline=committed.filter(o=>o.crn===crn);
+    assert.equal(timeline.length,2);assert.ok(timeline.every(o=>o.section===section&&o.course_number==="343"));
+    assert.equal(new Set(timeline.map(o=>o.observation_id)).size,2);
+  }
+  assert.deepEqual(committed.filter(o=>!["17599","20981","21051"].includes(o.crn)),preserved);
+  assert.equal((await send(opening)).status,200);
+  assert.deepEqual(await rows("observations"),committed);assert.deepEqual(await rows("opening_events"),events);
+  const duplicate=payload({observations:[...observations([0,0,0]),observations([0,0,0])[0]]});
+  assert.equal((await send(duplicate)).status,400);
+  assert.deepEqual(await rows("observations"),committed);
+});
