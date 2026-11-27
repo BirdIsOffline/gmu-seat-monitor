@@ -1,4 +1,4 @@
-"""Connect an existing GMU monitor to free Bark iPhone push notifications."""
+"""Configure the monitor with an existing Bark iPhone notification key."""
 
 from getpass import getpass
 from pathlib import Path

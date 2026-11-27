@@ -1,51 +1,46 @@
 # Architecture and design decisions
 
-## Components
+## Deployed data flow
 
-1. **External scheduler:** cron-job.org sends authenticated HTTP requests to GitHub's `workflow\_dispatch` endpoint, with `mode=check`. The scheduler is configured outside the repository; its access token is not committed.
-2. **GitHub Actions runner:** starts a temporary Linux job for each trigger. The operational workflow uses Python, installs `requests`, restores a prior public-data snapshot from the Actions cache, invokes `monitor.py --once`, and saves updated state.
-3. **Course search adapter (`monitor.py`):** discovers the Spring 2027 term code, initializes the public course search, retrieves JSON, and matches subject, course number, section, and CRN rather than relying on a loose title match.
-4. **Seat decision:** `parse\_unreserved` interprets explicitly labeled availability; `alertable\_open\_seats` limits candidate seats to total availability. The code compares newly observed candidate counts with the previous snapshot.
-5. **Push delivery:** notifications are sent through Bark using a device key in the GitHub Actions secret `BARK\_DEVICE\_KEY`.
-6. **CI:** `.github/workflows/ci.yml` uses Python unit tests with mocked network access and never runs live course checks.
-7. **Historical ingestion (disabled by default):** `cloud_history.py` prepares sanitized
-   immutable UUID4 payloads for the authenticated Worker/D1 destination.
-   One D1 transaction durably stores observations and maintains chronological
-   historical opening edges, including delayed/concurrent submissions. It needs
-   no inbox, scheduled processor or persistent Linux host. `history_outbox.py`
-   remains optional for surviving POSIX disk. `history_capture.py` copies only
-   completed public observations under an explicit monitor opt-in;
-   `history_submit.py` seals and submits them in a separate process with a hard
-   deadline and independent reporting. See [structured handoff](LIVE_HISTORY_ADAPTER.md)
-   for default-off gates, retries, cancellation and the dedicated future production
-   endpoint. See [Cloudflare-first history](CLOUDFLARE_DURABLE_HISTORY.md)
-   for transaction boundaries, migration, quotas, staging/recovery and the loss
-   window before facts reach Cloudflare.
+The [system diagram](SYSTEM_DIAGRAM.md) shows the boundaries. An external dispatcher invokes GitHub Actions at a five-minute best-effort cadence. The polling gate controls live checks; CI is separate and needs no monitoring credentials.
 
-## Core decisions
+`monitor.py` resolves the term and matches exact subject, number, section and CRN. State is keyed by CRN for the current term and cached between jobs. History uses `(term, crn)` and copies completed lookups without another catalog request.
 
-**Reserved vs. general seats.** A positive total seat count alone is not proof that a student can enroll. When a reservation summary is returned, an alert requires an explicit positive count of unreserved seats. If reservation metadata is missing, results are marked *potentially available* and require manual verification.
+`health_runner.py` supervises monitoring and reports lookup health. Alerts and state saves precede capture for each course. A separate deadline-controlled process submits immutable sanitized checks to the ingestion Worker. D1 commits observations and chronological event repairs atomically. The dashboard reads the same history using independent authentication.
 
-**Course lifecycle.** Explicit active/retired status excludes IT 304 from new lookups and seat notifications while preserving cached state, historical ingestion, observations and events. IT 341 DL1 and all three IT 343 sections (DL1, DL2 and DL3) use the same existing alert rules. Catalog matching and live capture derive each course’s exact configured section. The standalone dashboard mirrors statuses under a CI parity guard and calculates active freshness independently of retired history.
+## Decisions and tradeoffs
 
-**Noise reduction.** The latest alert policy reports increases in candidate seats (0→1, 1→2, etc.), not class closure, reserved-only changes, or unrelated changes.
+| Decision | Reason and consequence |
+| --- | --- |
+| Exact section and CRN | Multiple sections share course numbers; title matching cannot separate state and alerts |
+| Explicit active/retired status | Stop polling without deleting facts; configuration parity is tested |
+| Reservation-aware candidates | Known reserved-only availability is non-actionable; missing metadata remains uncertain |
+| Change-based alerts | Suppress unchanged/decreasing candidates while state survives; cold starts can notify on already-visible potential availability |
+| Separate history process | Capture/delivery failure cannot replace monitoring health or retry phone alerts |
+| Direct atomic D1 ingestion | Bounded projection requires no pending inbox, scheduled drain or persistent host |
+| Immutable UUID/body retries | Lost acknowledgements can be retried without duplicate observations; changed facts under the same UUID fail |
+| Separate dashboard/token | Read access does not disclose ingestion credentials or expose mutations; D1 binding itself is not read-only |
+| Manual Worker deployment | Git publication and offline CI do not implicitly change hosted services |
 
-**Separate test and live workflows.** Automated tests should run whenever code changes, not poll GMU on every commit. The live job remains explicitly authorized and separately scheduled.
+The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) distinguishes immutable observations from revisable event edges. The [handoff](LIVE_HISTORY_ADAPTER.md) and [optional outbox](HISTORY_RELIABILITY.md) have different source durability guarantees.
 
-**Read only.** The script does not sign into user accounts or submit registration changes. The student must verify and complete any safe course switch manually.
+## Failure boundaries
 
-## Failure modes and limitations
+| Failure | Current behavior and limit |
+| --- | --- |
+| Catalog error | Lookup fails; completed and failed sections stay distinguishable |
+| Missing/delayed dispatch | Coverage has gaps; transient openings cannot be reconstructed |
+| Cache loss | Baseline can reset, permitting repeated cold-start alerts |
+| Bark error | Returns false without automatic retry; lookup health does not verify delivery |
+| Runner ends before D1 receipt | Unsubmitted facts may be permanently lost |
+| Commit with lost acknowledgement | Original UUID/body retry deduplicates accepted effects |
+| Delayed sample | Transaction repairs historical edges without issuing notifications |
+| Bad identity, tied time or conflicting UUID | Entire historical check is rejected |
+| Missing active observation | Aggregate freshness remains missing despite other recent records |
+| Database restore | Recovery depends on surviving recovery points/source; no production RPO/RTO is established |
 
-|Failure|Current behavior|Proposed improvement|
-|-|-|-|
-|API changed or unreachable|Raises a search error; job fails|Send a rate-limited operational health alert after repeated failures|
-|Cache eviction / cold start|Previous snapshot may be unavailable|Persist a bounded snapshot in a small durable store|
-|GH API dispatch accepted but runner fails|External scheduler reports 204, but monitor may fail|Track end-to-end run outcomes separately|
-|Opening appears between runs|May be missed|Evaluate approved data source or frequency; no claim of real-time coverage|
-|Reserved metadata absent|Treats visible seats as potentially available|Add a clearer classification for unknown eligibility|
-|GitHub token expiry|External triggers fail|Track expiry and renew scoped token securely|
+## Security and scope
 
-## Data and secrets
+No student credentials or registration actions are part of this system. History contains public identities, counts, timestamps and fixed health categories. See [security](../SECURITY.md).
 
-The saved snapshot contains public section-level availability, not student rosters. Bark device keys are configured as secrets, and the GitHub dispatch token lives only in the external scheduler. The repository should not include cookies, student credentials, API bearer tokens, or personal enrollment data.
-
+The monitor is single-term. Its CRN-only cache and dashboard queries must be isolated or extended before identifiers are reused in another term. A term column in the database alone does not make the UI a multi-term browser.

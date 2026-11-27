@@ -1,10 +1,31 @@
-# Security and responsible usage
+# Security and responsible operation
 
-- This repository contains **only read-only monitoring code**. No account login, CAPTCHA bypass, or automatic class registration.
-- Do not commit `bark_key.txt`, GitHub personal-access tokens, cookies, student IDs, passwords, `.env` files, or private enrollment information.
-- Use GitHub Actions Secrets for `BARK_DEVICE_KEY`; configure the external dispatch token outside GitHub source files, scoped to this repository with the minimum required permission and an expiration date.
-- If a secret is exposed, revoke/rotate it immediately and remove it from Git history if necessary.
-- Public course data may still be subject to university access and rate-limit rules. Obtain permission for scheduled requests and stop immediately if the site blocks the monitor.
-- The monitoring API is not an official enrollment guarantee; students must confirm eligibility and existing registration protections before taking action.
+## Boundaries
 
-To report a vulnerability, contact the repository owner privately rather than opening a public issue with sensitive details.
+The monitor makes read-only requests to the public catalog. It does not use student credentials, sign in, bypass access controls or perform registration. Scheduled access requires permission and the `GMU_POLLING_APPROVED` gate. Stop polling if access is denied or permission expires.
+
+Ingestion deliberately writes sanitized public observations to D1. The separate dashboard exposes authenticated fixed SELECT queries. Its binding is not an SQL-enforced read-only role: code restrictions, separate credentials and deployment review provide that boundary.
+
+## Credentials and data
+
+- Store the Bark key and ingestion token in GitHub Actions secrets. Keep the dashboard token in a distinct Cloudflare secret and a private password manager.
+- Keep expiring, repository-scoped dispatch credentials outside source. Cloudflare management credentials do not belong in client payloads or monitoring steps.
+- Never publish student information, registration records, cookies, tokens, real endpoints, raw inventories, databases, exports or recovery evidence.
+- `.gitignore` covers known local files, not arbitrarily named exports. Review staged content and commit metadata; use GitHub noreply addresses for new commits.
+- For an exposed secret, revoke or rotate it, restrict affected logs, and assess historical copies. Removing the current file does not erase Git history or clones.
+
+The ingestion API bounds payloads and accepts only public identity/count fields. It cannot establish the provenance of numeric observations. Errors use fixed categories; surrounding infrastructure must not log authorization headers or request bodies.
+
+Dashboard HTML is public; history JSON requires its read token. The token stays in tab memory, not persistent browser storage or URLs. A compromised browser or exposed token can read history. Per-user authorization, application rate limiting and overlapping-token rotation are not implemented.
+
+## Workflow and test isolation
+
+CI runs offline tests and disposable D1 fixtures without live monitoring credentials. Monitoring, history submission and manual Worker deployment are separate. Actions currently use version tags rather than immutable commit pins; pinning is a separate hardening change, not an existing guarantee.
+
+Synthetic tokens and stable public identifiers in tests are intentional fixtures. Never substitute real credentials or private observations. Dependencies require continued review; the [dependency security record](docs/DEPENDENCY_SECURITY_REVIEW.md) is historical evidence, not a current vulnerability attestation.
+
+## Reliability and disclosure
+
+API acceptance does not prove phone playback. Positive seat counts do not establish eligibility. Caches, ephemeral runners and best-effort dispatch are not durable capture guarantees. See [failure boundaries](docs/ARCHITECTURE.md#failure-boundaries).
+
+Report vulnerabilities privately through an existing contact channel for the repository owner. Do not put secrets in public issues. This document does not configure a dedicated private reporting channel.

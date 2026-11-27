@@ -1,29 +1,46 @@
-# Historical analytics dashboard
+# Authenticated historical dashboard
 
-A separately deployed Cloudflare Worker renders a self-contained historical dashboard and queries the existing D1 tables (`checks`, `observations`, `opening_events`) **read-only**. It does not import or modify the ingestion Worker, monitor, GitHub Actions workflow, Bark notifications, or external scheduler; it creates no GMU traffic. It has no data-writing routes or calls to the production history ingestion endpoint.
+A standalone Cloudflare Worker serves fixed read-only queries over D1 `checks`, `observations` and `opening_events`. It is deployed independently from ingestion and creates no catalog traffic or Bark notifications.
 
-## Security and deployment
+## Authentication
 
-- **Independent deployment:** repository updates do not automatically deploy the dashboard Worker. Review source changes and binding configuration before manual deployment.
-- The dashboard uses a **separate** `DASHBOARD_READ_TOKEN` secret, never the history ingestion token. Its HTML is public but history JSON requires this token; the browser holds it only in tab memory and sends it only to same-origin `/api/dashboard` over HTTPS. Do not put the token into source code, GitHub commits, URLs, logs or chat.
-- The D1 binding must be the operator-approved **production** history database, not staging or recovery. Use a separate Worker from `gmu-seat-history-production-worker`. No ingestion routes or credentials are present in this app.
-- Require a trusted HTTPS endpoint before use. For stronger access controls, review Cloudflare Access separately before public deployment. This app does not implement IP rate limits or token rotation; configure them at the edge if exposing publicly.
-- Free-tier capacity, retention and Access availability must be verified for the account. Observe query/CPU usage if deploying. The dashboard has no independent polling schedule and makes no outbound requests.
+The HTML shell is public. `/api/dashboard?range=24h` and `range=7d` require `DASHBOARD_READ_TOKEN`, separate from ingestion credentials. Missing/incorrect credentials return HTTP 401; missing server configuration fails closed. Valid credentials and the database binding permit HTTP 200.
 
-## Dashboard behavior
+The token stays in tab memory, is cleared from the input on login, and goes only to the same-origin API over HTTPS. Reloading requires reentry. No token belongs in source, URLs, persistent browser storage or screenshots.
 
-- Switch between 24-hour and 7-day windows. Displays selected-window check success rate, last stored total seat counts labelled active or retired, time-series line charts for all five configured CRNs, latest classifications/unreserved status, sampled opening events and recorded-check cadence metrics.
-- The freshness panel uses the **oldest latest observation among active courses**, across all history rather than only the selected chart window, server time on query, and on-screen elapsed time. IT 341 DL1 and IT 343 DL1, DL2 and DL3 are active; IT 304 is retired and does not contribute a stale-monitoring warning. Missing active observations remain unknown even if a retired course or a check has a recent timestamp. If every course is retired, freshness is inactive. It labels stored-history freshness **Healthy** at ≤10 minutes, **Delayed** at >10 to ≤15 minutes, and **Stale** at >15 minutes. Missing or invalid/future timestamps show a neutral state; no fictitious successful checks are inferred. The browser updates the age once a minute but does **not** poll D1 automatically; the operator clicks **Refresh history** for a new snapshot. Freshness does not guarantee the scheduler ran or that an alert was delivered.
-- Each IT 343 section has a separate CRN-keyed total-seat card, legend, color and chart series. DL1 is CRN 17599, DL2 is CRN 20981 and DL3 is CRN 21051. Missing observations remain missing; reference seat counts are never injected. All four active targets must have valid observations before freshness can be healthy. The fixed sample-query bound is 12,000 rows, sufficient for seven days at the current five-minute cadence for all five identities, including retained retired history; it is not an unlimited history export.
-- IT 304 remains in charts, events and the all-history latest-snapshot table as **Retired · history only**. No records are deleted or reclassified, and the selected chart window still limits displayed samples/events. The API returns current course status separately from immutable historical observations.
-- Cadence metrics use `LAG` on *stored checks inside the selected time window*: measured interval count, average/longest interval, and counts over 10 or 15 minutes. They cannot detect missing triggers before the first stored check, after the most recent check, or determine that every scheduled trigger ran. They measure recorded-history spacing, **not uptime or delivery guarantee**.
-- Unknown unreserved seats are rendered as `Unknown`, never zero or eligible. `total_available=3` for IT 341 does **not** prove 3 unreserved seats exist.
-- Chart segments break if consecutive observations are more than 15 minutes apart. Time shown in the user's browser local timezone, marked as local in the data table header.
-- Token is not stored in localStorage, sessionStorage, cookies or URLs. Reload requires reentry.
-- Fixed queries, configured active and retired CRNs, bounded returned history and 50-event cap. No raw database, credentials, student data or arbitrary SQL are exposed through the API.
+The D1 binding is a normal binding, not an SQL-enforced read-only role. Fixed SELECTs and the absence of mutation routes enforce read-only application behavior. Per-user authorization, built-in rate limiting and automatic token rotation are not implemented.
 
-## Review and dry run
+## Section identities
 
-The Worker source can be checked using `node --check dashboard/worker.js`. The standalone Node tests can be run with `node --test dashboard/worker.test.mjs`. They use mocked D1 responses, disposable in-memory SQLite and a browser DOM substitute, issue no network requests, and do not prove live Cloudflare behavior. The course statuses must match `monitor.py`; a Python parity regression enforces this without changing the standalone deployment model.
+Cards, legends and series use CRNs rather than course numbers. The [target table](../README.md#section-identity-and-lifecycle) has four active sections and one retired section. Each IT 343 section retains its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
 
-The dashboard Worker is deployed independently from the repository. Its D1 `DB` binding targets the reviewed history database, and `DASHBOARD_READ_TOKEN` is stored as a Cloudflare secret. No production database ID or credential is committed. Follow [deployment instructions](DEPLOYMENT.md) for configuration and rollback; keep the monitoring and ingestion services separate.
+Retired history remains queryable. Latest snapshots can predate the selected chart window and are labelled history-only. Status is current configuration, separate from historical observations.
+
+## Freshness and recorded coverage
+
+Freshness uses each active section's latest observation across all history and server time. The aggregate follows the worst state and oldest age; retired records do not contribute.
+
+| State | Meaning |
+| --- | --- |
+| Healthy | Every active section has a valid observation no more than 10 minutes old |
+| Delayed | Limiting age is over 10 through 15 minutes |
+| Stale | Limiting age exceeds 15 minutes |
+| No data | An active section lacks an observation |
+| Clock issue | An active timestamp is invalid or more than two minutes ahead |
+| Inactive | Every section is retired |
+
+The browser ages status once a minute but loads new records only on login, explicit refresh or range change. Success and cadence cover stored checks; they do not count missing dispatches or prove notifications. Cadence uses `LAG` only inside the selected window.
+
+## Presentation and bounds
+
+- The 24-hour and seven-day views retain active and retired identities.
+- Unknown unreserved availability remains unknown, not zero or confirmed eligibility.
+- The sample query returns at most 12,000 chronological rows. This covers the current five-minute workload, not unlimited export. Larger workloads require a revised query contract.
+- Chart segments break across gaps over 15 minutes. A single observation has no connecting segment. Times are browser-local.
+- Events are capped at 50 recent sampled increases. Delayed samples can revise edges; events never generate notifications.
+
+## Verification
+
+Hosted tests cover authentication, fixed SQL, independent identities, missing/stale states, rendering and an 8,064-row seven-day fixture. Live checks confirmed both ranges, five series, retained baseline history and zero JavaScript errors. Browser-only omission replay verified missing-data display without production writes. No historical opening events existed, so live event-row rendering remains unexercised; the empty state and synthetic event rendering were checked.
+
+Run `node --check dashboard/worker.js` and `node --test dashboard/worker.test.mjs`. These use mocks, disposable SQLite and a DOM substitute. See the [deployment runbook](DEPLOYMENT.md).

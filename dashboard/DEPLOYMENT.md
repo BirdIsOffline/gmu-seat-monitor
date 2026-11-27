@@ -1,44 +1,30 @@
-# Dashboard deployment runbook (Cloudflare dashboard; manually authorized)
+# Dashboard deployment and rollback
 
-This runbook applies to the **separate** historical dashboard Worker. The ingestion Worker `gmu-seat-history-production-worker`, its `/v1/checks` endpoint, the external scheduler, GitHub Actions, Bark settings, database schema and monitoring should remain **unchanged**. Do not import an ingestion token into this Worker.
+This runbook updates the existing standalone dashboard Worker without changing ingestion, schema, monitoring targets, scheduling, notification settings or credentials.
 
-## Prerequisites and identifiers
+## Inputs and preflight
 
-- GitHub source: https://raw.githubusercontent.com/BirdIsOffline/gmu-seat-monitor/main/dashboard/worker.js
-- New Worker name: `gmu-seat-history-dashboard` (must NOT be the existing `gmu-seat-history-production-worker`)
-- Existing D1 database: `gmu-seat-history-production` (do not choose staging or recovery)
-- Worker D1 binding variable: **`DB`**
-- New Worker Secret name: **`DASHBOARD_READ_TOKEN`** (NOT `INGEST_TOKEN`; do not reuse the ingestion token)
-- No extra database or migration is needed. Existing tables: `checks`, `observations`, `opening_events`.
+Keep account/resource mappings, endpoint and deployment versions in private operator records. Required bindings are `DB` for history and the secret `DASHBOARD_READ_TOKEN`, distinct from the ingestion token. Local Wrangler examples do not identify production resources.
 
-## Dashboard-only deployment
+Use an immutable reviewed Git commit with successful Ubuntu CI. Verify local/remote source parity. Preserve the current deployed version, runtime settings and bindings before changing traffic.
 
-1. In https://dash.cloudflare.com/ select your account then **Workers & Pages** → **Create application** → **Create Worker** (or **Hello World**) and name the new Worker exactly `gmu-seat-history-dashboard`. Deploy the initial boilerplate. **Never select or edit the existing production ingestion Worker.**
-2. Open the NEW Worker's **Settings → Bindings** (some UI versions label this as **Bindings**). Select **Add binding → D1 database**, set the binding variable to `DB`, and choose **`gmu-seat-history-production`**. Save/deploy binding settings. This shares the existing database but does not create another database or change the schema.
-3. On your own Windows PC, run `py -c "import secrets; print(secrets.token_urlsafe(32))"`. It prints one fresh random 43-character token. **Store it privately in a password manager** and do not paste it in Git, chat, screenshots or a public shell history.
-4. In the NEW Worker's **Settings → Variables and Secrets → Add**, choose type **Secret**, name `DASHBOARD_READ_TOKEN`, value = the token from step 3. Deploy changes. **Do not use plaintext Variable type** and **do not copy the ingestion token**.
-5. Open the raw GitHub source URL above. Select all and copy the full JavaScript file. Return to the NEW Worker and choose **Edit code**. Replace the Hello World source in the primary Worker script with the copied JavaScript. Save/deploy. This code is standalone; it needs no imports, libraries or build commands.
-6. Open the NEW Worker's `https://...workers.dev/` URL. You should see **Seat availability history** with a read-token input (not sample data before authentication).
-7. Security check: request `https://...workers.dev/api/dashboard?range=24h` in a *new browser tab with no authorization header*. It should reply with HTTP 401 and JSON code `UNAUTHORIZED` (not data).
-8. Back on `/`, enter the **separate dashboard token** from your password manager. Confirm IT 304 DL1 / CRN 17582 is **Retired · history only** and IT 341 DL1 / CRN 17593 plus IT 343 DL1 / CRN 17599, DL2 / CRN 20981 and DL3 / CRN 21051 are **Active**, with four active / one retired course and all five historical series included when observations exist in 24-hour and 7-day charts. The latest snapshot table can show older retained samples outside those windows. Verify freshness follows the oldest latest observation across IT 341 and IT 343, not IT 304 history or a recent check alone. Before the first genuine observation for each new section, that section’s total is missing and aggregate active freshness remains unknown. Verify separate cards, CRNs and colors for all three IT 343 sections; one section must never overwrite another. IT 341 unknown unreserved status must read **Unknown**, not "3 unreserved".
-9. Share only the publicly visible Worker **URL without token or query credentials**, and a screenshot with any secret hidden, so the endpoint and presentation can be checked. Never share the token.
-10. Use only the separately approved reviewed source revision; repository edits do not deploy it automatically. Existing dashboard updates require no new Worker, token, D1 database or migration. Do not treat this runbook as approval to change live services.
+## Dashboard-only update
 
-## What approval does and does not authorize
+1. Verify the selected Worker and database are the dashboard/history targets. Confirm the existing token works and missing credentials return HTTP 401.
+2. Capture baseline counts and protected fingerprints for checks, observations and events. Keep raw data private; normal ingestion can append records during comparison.
+3. Upload exactly the reviewed `dashboard/worker.js` blob as a new version. Preserve compatibility settings and bindings, retaining secrets without embedding or rotating their values. Record the returned version before activation.
+4. Activate that version and check traffic assignment. Reconcile ambiguous acceptance through status reads before any further upload or activation.
+5. Require authenticated HTTP 200, missing/invalid-token HTTP 401 and served HTML matching the selected source.
+6. Check separate CRN cards, legends, tables, series and lifecycle labels. Each active section must independently affect freshness. Test missing data with isolated fixtures, not production edits.
+7. Check both ranges, the query bound, nullable counts, events or their correct empty state, and JavaScript errors. Compare baseline history, explaining any normal ingestion activity.
+8. Verify schema, ingestion deployment, credentials and unrelated settings are unchanged. Retain redacted evidence and the previous version.
 
-- Authorized: separate dashboard Worker using the existing D1 as a **read-only query source**, tested with a separate read token.
-- Not authorized: overwriting the existing ingestion Worker; changing DB rows, migrations, monitoring frequency, Bark settings, access credentials or scheduled workflow; enabling public historical JSON without authentication.
-- The D1 binding itself is a regular D1 binding (not an SQL-enforced read-only database role); read-only behavior is enforced by the dashboard source containing only fixed SELECT statements. Review code before changing it.
-- The page HTML is public. JSON history requires the secret. The browser keeps the token in tab memory and clears it from the input after login, but a compromised browser could access it; protect the device/password manager.
-- Do not store the token in a URL, browser local storage, GitHub Action, Cloudflare plaintext variable, or log.
+Use existing observations. A dashboard release needs no new database, migration, monitoring dispatch or notification. A Git push alone does not deploy the Worker.
 
-## Rollback and verification
+## Credentials and rollback
 
-- If the dashboard behaves unexpectedly, disable the **new dashboard Worker's** `workers.dev` route or delete **only that dashboard Worker** in Cloudflare. **Do not delete the database or existing ingestion Worker**.
-- Verify GitHub Actions health and `HISTORY ... INGESTED` remain normal after rollout. D1 query checks can independently confirm data still records.
-- This setup does not itself create a durable retry queue for missed monitoring samples, and a 100% stored-check rate does not prove all scheduled checks were delivered.
+Use the existing token for routine updates. Enter it through a private masked interface, not command arguments or logs. Rotation is separate. If rollback crosses a previous rotation, verify the old version's secret bindings before activating it; do not accidentally restore an obsolete credential.
 
-Cloudflare references:
-- https://developers.cloudflare.com/learning-paths/workers/get-started/first-worker/
-- https://developers.cloudflare.com/d1/best-practices/remote-development/
-- https://developers.cloudflare.com/workers/configuration/secrets/
+Reactivate the preserved known-good version after checking runtime/binding compatibility. Preserve D1 and ingestion, repeat authentication/source/history checks, and record the outcome. Deleting the Worker or database is not routine rollback. Route containment for an exposure is a separate operational decision.
+
+The dashboard has no mutation routes, but its D1 binding is not a read-only database principal. Fixed queries and code review remain security boundaries. See [historical recovery](../docs/CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery).

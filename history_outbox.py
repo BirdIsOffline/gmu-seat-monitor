@@ -211,7 +211,7 @@ class HistoryOutbox:
 
 
 def enqueue_completed_best_effort(outbox, *args, **kwargs):
-    """Future isolated adapter boundary, including preparation/storage failures.
+    """Optional outbox boundary for preparation and local storage failures.
 
     The caller owns the UUID and completed public facts. No monitoring result is
     accepted or changed here. Successful enqueue means local commit, NOT delivery.

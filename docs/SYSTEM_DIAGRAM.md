@@ -10,13 +10,13 @@ flowchart TB
     E["Previous snapshot\nGitHub Actions cache"] <-->|"public section-only state"| D
     D -->|"Potentially available seats increase"| F["Bark API"]
     F --> G["iPhone notification"]
-    D -->|"Completed observations"| H["Optional independent\nhistory capture + submit"]
+    D -->|"Completed observations"| H["Independent structured\nhistory capture + submit"]
     H -->|"Authenticated ingestion"| I["Cloudflare ingestion Worker"]
     I -->|"Atomic transaction"| J[("Cloudflare D1\nchecks + observations + events")]
     J -->|"Fixed SELECT queries"| K["Separate Cloudflare\ndashboard Worker"]
-    L["Private browser\ndashboard read token"] --> K
+    L["Authenticated browser\ndashboard read token"] --> K
     K -->|"24h / 7d charts,\ncadence + freshness"| L
-    M["GitHub CI\nMocked offline tests"] -.-> D
+    M["GitHub CI\nOffline regression tests"] -.-> D
     M -.-> I
     M -.-> K
 ```
@@ -26,9 +26,9 @@ flowchart TB
 - No student account login, enrollment, registration changes or CAPTCHA bypass.
 - Cloudflare ingestion and dashboard use distinct authentication secrets; the dashboard is a separate read-only query path.
 - Historical source facts can still be lost if an ephemeral GitHub runner disappears before acknowledgment.
-- Spring 2027 IT 341 DL1 and IT 343 DL1, DL2 and DL3 are active; IT 304 is retired from polling and alerts but retained in history. Active-course observations determine monitoring freshness. The term and course identities remain explicitly configured; disable live polling when it is no longer needed. [Term lifecycle](TERM_LIFECYCLE.md).
+- The [target configuration](../README.md#section-identity-and-lifecycle) has four active identities and one retired identity. CRNs separate sections; active observations alone determine freshness. See [term lifecycle](TERM_LIFECYCLE.md).
 - Architecture updates in GitHub do **not** automatically redeploy the Cloudflare Workers.
 
 ## Offline verification
 
-Run `python monitor.py --demo` and `python demo_history.py` for local synthetic examples; run `python -m unittest discover -s tests -v` for mocked API, state-transition and notification-contract tests. No credentials or university requests are needed.
+Run `python monitor.py --demo` and `python demo_history.py` for local synthetic examples; run `python -m unittest discover -s tests -v` for mocked API, state-transition and notification-contract tests. Worker integration also uses disposable local D1. No live credentials or university requests are needed. See [local validation](LOCAL_DEMO.md).

@@ -1,4 +1,6 @@
-# PR #3 dependency security review
+# Dependency security remediation record
+
+This is the historical PR #3 review of the lockfile and overrides, not a current registry-advisory assessment. The current hosted regression count is recorded in the [README](../README.md#verified-results).
 
 The original lockfile at `846b0f7` reproduces npm's **3 high-severity affected
 packages**: `miniflare`, `sharp`, and `undici`. This is a package count, not three
@@ -9,14 +11,12 @@ Undici advisories. Miniflare inherits their severity and has no separate advisor
 
 | Package/path | Installed before | Vulnerable versions | Available remediation |
 | --- | --- | --- | --- |
-| Direct Miniflare | 4.20260730.0 | This release pins vulnerable Sharp and Undici | Latest stable Miniflare is still this release; scope overrides to this version instead of switching to the Miniflare 5 beta |
+| Direct Miniflare | 4.20260730.0 | This release pins vulnerable Sharp and Undici | At review time, overrides were scoped to this stable release rather than switching to the Miniflare 5 beta |
 | Miniflare → Sharp | 0.35.2 | Below 0.35.4 / below 0.35.5, by advisory | 0.35.4 fixes the libheif finding; 0.35.5 also fixes librsvg; select 0.35.5 |
 | Miniflare → Undici | 7.28.0 | See individual ranges below | 7.29.0, 7.29.1, or 7.30.1 by advisory; select 7.30.1 to cover all reported findings |
 
 Wrangler 4.158.0 already uses Miniflare 5.20261104.0-beta with patched Sharp
-0.35.5 and Undici 7.30.1. Keep the existing Wrangler and direct stable Miniflare
-versions. The changes deduplicate patched dependencies; no new major or beta
-upgrade is introduced. npm reports no automatic Miniflare/Sharp fix for the pinned
+0.35.5 and Undici 7.30.1. The remediation retained the existing Wrangler and direct stable Miniflare versions and deduplicated patched dependencies without introducing a new major or beta upgrade. npm reports no automatic Miniflare/Sharp fix for the pinned
 graph; that does not mean no patched transitive release exists.
 
 ## Advisory inventory from npm audit
@@ -60,7 +60,7 @@ GHSA-2jg2-4ch7-h545; the librsvg advisory identifies CVE-2026-96889.
 
 All affected npm packages are **development dependencies**. The Worker source
 imports none of them; hosted Workers use Cloudflare's runtime. The Python client
-uses Requests, not Undici. No deployed Worker exists for this prototype.
+uses Requests, not Undici. At the dependency-review revision, the ingestion component was an offline prototype; the current deployed architecture is documented separately.
 
 - **Sharp:** Miniflare loads it in local Images/cf.image transformation handlers.
   The Worker has no image binding, uploads, image transformation, or image fetches;
@@ -89,8 +89,8 @@ these dependencies rather than rely on current feature restrictions.
 
 ## Change and compatibility assessment
 
-Add version-scoped npm overrides under `miniflare@4.20260730.0` for Sharp 0.35.5
-and Undici 7.30.1, then regenerate the lockfile with ordinary npm install.
+The remediation added version-scoped npm overrides under `miniflare@4.20260730.0` for Sharp 0.35.5
+and Undici 7.30.1, and regenerated the lockfile with ordinary npm install.
 No `npm audit fix --force` is used. Sharp remains within 0.35.x (a patch update),
 and Undici remains within major 7 (a minor update). Their engine requirements
 are satisfied by Node 24 in CI. Miniflare's API/workerd version, Wrangler,
@@ -103,7 +103,9 @@ rollback and Python-to-D1 parity with the patched tooling. A synthetic in-memory
 PNG encode/decode smoke check confirms Sharp's native library loads. This does
 not replace upstream testing of unused image/WebSocket/interceptor features.
 
-## Validation and remaining risks
+## Recorded validation and remaining risks
+
+The results below apply to the dependency-remediation revision. They are retained as engineering evidence rather than presented as the latest suite totals or a fresh vulnerability scan.
 
 - Clean `npm ci`: succeeds without vulnerability warnings.
 - Full `npm audit` including dev dependencies: **0 vulnerabilities**.
@@ -116,7 +118,4 @@ not replace upstream testing of unused image/WebSocket/interceptor features.
 Audit results describe known registry advisories at review time, not a guarantee
 against unknown flaws. Overrides require maintenance: re-evaluate/remove them
 when a patched stable Miniflare release adopts these versions. Node's bundled
-HTTP libraries and the host runtime have their own update lifecycle. Production
-limitations from CLOUD_HISTORY.md (no durable ordered outbox, live D1 recovery
-validation, rate limiting, or deployment approval) remain. Do not merge or deploy
-as part of this dependency fix; rerun hosted CI and independent review.
+HTTP libraries and the host runtime have their own update lifecycle. The deployed system and current limitations are documented in [architecture](ARCHITECTURE.md) and [security](../SECURITY.md). The optional outbox and deployed handoff were implemented after this review. Production restore objectives, application rate limiting and dependency maintenance remain separate operational concerns.

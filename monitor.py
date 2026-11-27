@@ -3,7 +3,7 @@
 Only requests publicly listed course information. No account logins,
 registration actions, drops, CAPTCHA handling, or private endpoints.
 
-GMU's public Banner search API compatibility must be verified locally.
+Exact identity checks validate the public response shape and reject mismatches.
 """
 
 import argparse

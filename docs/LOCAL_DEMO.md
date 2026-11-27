@@ -1,47 +1,56 @@
-# Local demonstration and testing
+# Local tests and demonstrations
 
-The project includes offline demonstrations for seat classification, monitoring history, and notification decisions. These commands use synthetic data or mocked network interactions; they do not query GMU or send Bark notifications.
+Tests use synthetic data, mocked external services and disposable local databases. They do not query GMU, send Bark notifications or use hosted Cloudflare services. Dependency installation accesses package registries.
 
-## Prerequisites
+## Full Linux/POSIX validation
 
-- Python 3.12+
-- Node.js for dashboard tests
-
-Install Python dependencies from the repository root:
+Use Python 3.12 and Node.js 24, matching [CI](../.github/workflows/ci.yml). Locking, process-timer and outbox tests require POSIX; the complete suite is not supported on Windows. From the repository root:
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-## Monitor demonstration
-
-```bash
-python monitor.py --demo
-```
-
-This exercises simulated states including full sections, reserved-only availability, and a possible unreserved opening. It requires no live credentials.
-
-## Historical data demonstrations
-
-```bash
-python demo_history.py
-python demo_live_history.py
-```
-
-These scripts demonstrate the history data structures and submission flow using synthetic or mocked inputs. See [history architecture](CLOUDFLARE_DURABLE_HISTORY.md) for storage and ingestion details.
-
-## Automated verification
-
-```bash
+npm ci --prefix cloudflare
 python -m unittest discover -s tests -v
+npm test --prefix cloudflare
 node --check dashboard/worker.js
 node --test dashboard/worker.test.mjs
 ```
 
-Python tests cover the monitor, notification pipeline, state tracking, and history components. Dashboard tests use mocked D1 responses. The repository's CI workflow runs offline and does not access university systems or send push alerts.
+The hosted baseline is **244 tests, zero skips**: 192 Python, 28 Worker/D1 integration and 24 dashboard tests. Mocks and loopback integration establish protocol behavior, not guaranteed live availability. Use the committed npm lockfile.
 
-## System overview
+## Demonstrations
 
-See the [system diagram](SYSTEM_DIAGRAM.md) and [architecture](ARCHITECTURE.md) for the production data flow.
+```bash
+python monitor.py --demo
+python demo_history.py
+python demo_live_history.py
+npm run demo --prefix cloudflare
+```
 
-The live dashboard is token-protected. Keep dashboard tokens, Bark device keys, scheduler credentials, and Cloudflare account information out of screenshots, logs, and committed files.
+The monitor demo covers full, reserved-only and potentially unreserved states with delivery mocked. The SQLite demo uses a temporary database. Structured handoff preserves original bytes through a mocked lost acknowledgement. The Worker demo uses disposable Miniflare D1 for delayed timeline repair and replay.
+
+Stable identifiers, dates, seat counts and dummy tokens are fixtures, not production observations. Legacy fixtures deliberately activate retired identities to retain classification/lifecycle coverage. They do not seed production state or history.
+
+## Windows-compatible subset
+
+For example:
+
+```powershell
+python -m unittest discover -s tests -p test_it343.py -v
+python -m unittest discover -s tests -p test_notification_pipeline.py -v
+node --test dashboard/worker.test.mjs
+```
+
+Passing a subset does not replace Ubuntu CI. Do not add platform skips or weaken assertions to report a full local pass.
+
+## Local Worker development
+
+[Wrangler configuration](../cloudflare/wrangler.toml) has a placeholder database identifier, no account/routes and disabled public previews. Its example token is public and local-only.
+
+```bash
+cd cloudflare
+cp .dev.vars.example .dev.vars
+CLOUDFLARE_SEND_METRICS=false npm run migrate:local
+CLOUDFLARE_SEND_METRICS=false npm run dev
+```
+
+These scripts select local storage and loopback. Do not substitute production bindings or remote flags for an offline demo. Keep databases, tokens, endpoint mappings and browser captures outside Git.
