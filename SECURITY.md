@@ -8,11 +8,13 @@ Ingestion deliberately writes sanitized public observations to D1. The separate 
 
 ## Credentials and data
 
-- Store the Bark key and ingestion token in GitHub Actions secrets. Keep the dashboard token in a distinct Cloudflare secret and a private password manager.
+- Store the Bark key, ingestion endpoint and ingestion token in GitHub Actions secrets. Keep the dashboard token in a distinct Cloudflare secret and a private password manager.
 - Keep expiring, repository-scoped dispatch credentials outside source. Cloudflare management credentials do not belong in client payloads or monitoring steps.
 - Never publish student information, registration records, cookies, tokens, real endpoints, raw inventories, databases, exports or recovery evidence.
 - `.gitignore` covers known local files, not arbitrarily named exports. Review staged content and commit metadata; use GitHub noreply addresses for new commits.
 - For an exposed secret, revoke or rotate it, restrict affected logs, and assess historical copies. Removing the current file does not erase Git history or clones.
+
+Runner setup can print repository variables before application code runs. Supply the production endpoint through the secret context; keep exception messages, HTTP bodies and endpoint values out of reports. Existing exposed archives require separately authorized cleanup; see the [migration sequence](CLOUD_SETUP.md#endpoint-privacy-and-rollout).
 
 The ingestion API bounds payloads and accepts only public identity/count fields. It cannot establish the provenance of numeric observations. Errors use fixed categories; surrounding infrastructure must not log authorization headers or request bodies.
 

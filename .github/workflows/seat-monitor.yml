@@ -92,7 +92,7 @@ jobs:
         env:
           GMU_HISTORY_ENABLED: ${{ vars.GMU_HISTORY_ENABLED }}
           # Dedicated production target: never fall back to synthetic staging.
-          GMU_HISTORY_PRODUCTION_ENDPOINT: ${{ vars.GMU_HISTORY_PRODUCTION_ENDPOINT }}
+          GMU_HISTORY_PRODUCTION_ENDPOINT: ${{ secrets.GMU_HISTORY_PRODUCTION_ENDPOINT }}
           GMU_HISTORY_PRODUCTION_TOKEN: ${{ secrets.GMU_HISTORY_PRODUCTION_TOKEN }}
         run: >-
           python history_submit.py
