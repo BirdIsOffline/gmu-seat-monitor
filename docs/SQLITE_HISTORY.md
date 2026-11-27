@@ -129,8 +129,8 @@ GROUP BY day_utc ORDER BY day_utc;
 These are observed increases between periodic samples, not exact opening times.
 An opening may occur any time between samples; brief openings can be missed.
 Long gaps and failed checks reduce coverage. One count increase is one event,
-even if multiple seats appear. No rate per wall-clock hour or predictive claim
-is made. The deployed dashboard exposes bounded timelines, classification, health and coverage information. Daily analytics remain available through this local library rather than a promise of an additional dashboard view.
+even if multiple seats appear. These aggregates do not predict future openings. The deployed dashboard provides
+bounded timelines, classifications, health and coverage; daily analytics are available only through this local library.
 
 ## Offline validation
 

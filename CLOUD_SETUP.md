@@ -1,6 +1,6 @@
 # Deployment and operations
 
-The deployed system has a GitHub Actions monitor, external five-minute dispatch, Bark delivery, a dedicated ingestion Worker/D1 database and a separate authenticated dashboard Worker. Checked-in Wrangler configuration is for local testing, not a production inventory.
+This guide covers live polling, notifications and historical delivery. The [architecture](docs/ARCHITECTURE.md) describes the deployed components; checked-in Wrangler configuration is for local testing.
 
 ## Configuration boundaries
 
@@ -28,19 +28,19 @@ To pause polling, stop external dispatch and set `GMU_POLLING_APPROVED=false`, o
 
 ## Course retirement and release
 
-The [target table](README.md#section-identity-and-lifecycle) has five active sections and one retired section. Matching requires the exact term, subject, number, section and CRN. CRNs distinguish sections with the same course number.
+All five active sections in the [target table](README.md#section-identity-and-lifecycle) are deployed and verified; IT 304 remains retired. Matching requires the exact term, subject, number, section and CRN.
 
 Maintain statuses in `monitor.py` and `dashboard/worker.js`; CI verifies parity. Retirement excludes lookups and alerts but preserves state, observations, delayed historical ingestion and events. Invalid status fails validation. All-retired configuration exits without catalog lookups or capture.
 
 Release source through a pull request and successful Ubuntu CI. Deploy presentation changes independently using the [dashboard runbook](dashboard/DEPLOYMENT.md). Adding a section under the current protocol needs no ingestion Worker change, migration, credential rotation or cadence change. Verify normal scheduled observations; do not seed state or history from examples.
 
-Freshness uses the oldest latest active observation. A section without real observations remains missing; other samples cannot make the aggregate healthy. Retired sections are excluded. Dashboard rollback must preserve the database and monitoring lifecycle configuration.
+See the [dashboard guide](dashboard/README.md#freshness-and-recorded-coverage) for active-section freshness rules. Dashboard rollback must preserve the database and lifecycle configuration.
 
 ## Bark notification contract
 
 Qualifying candidate increases request `sound=alarm`, `call=1`, `level=critical` and `volume=10`; `call` and `volume` are strings. Titles include section and CRN. Reservation filtering and duplicate suppression precede delivery. The function makes one request with a 15-second timeout and no automatic retry; state persistence can suppress another attempt for a rejected push.
 
-Workflow `mode=test` uses the ordinary `timeSensitive` phone-test path rather than actionable alarm settings. Phone tests send real notifications and are deliberate operations, not CI checks. The labelled actionable-alarm test was accepted by Bark, and the operator confirmed successful playback with approximately 20 seconds of persistent ringing. The test did not represent a genuine seat opening. Ringing duration is an observed result, not a configured timing guarantee. Critical playback still depends on Bark/iOS support, permissions and settings.
+Workflow `mode=test` sends an ordinary `timeSensitive` notification, so it does not exercise the actionable alarm settings. A separate, labelled live alarm test was accepted by Bark and rang for approximately 20 seconds on the iPhone. This was a controlled playback test, not a genuine seat opening. Ringing duration was observed, not configured; playback depends on Bark/iOS support, permissions and device settings.
 
 [Official Bark parameters](https://github.com/Finb/Bark/blob/master/docs/en-us/params.md) · [API contract](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md)
 
@@ -52,6 +52,6 @@ Disable `GMU_HISTORY_ENABLED` to pause submission without changing ordinary moni
 
 ## Security and deployment separation
 
-Ingestion and dashboard use separate credentials. Use HTTPS and secret stores; never put credentials in command arguments, URLs, commits or screenshots. Source publication does not deploy Cloudflare automatically. Resource mappings and previous versions belong in private operator records.
+Ingestion and dashboard use separate credentials over HTTPS. Follow the [credential handling guidance](SECURITY.md#credentials-and-data); keep resource mappings and previous deployment versions private. Source publication does not deploy Cloudflare automatically.
 
 Permission for catalog access and the polling gate remain necessary regardless of CI. Stop on denied access or rate limiting. See [security](SECURITY.md) and [term lifecycle](docs/TERM_LIFECYCLE.md).

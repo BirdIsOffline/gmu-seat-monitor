@@ -22,10 +22,10 @@ Dashboard HTML is public; history JSON requires its read token. The token stays 
 
 CI runs offline tests and disposable D1 fixtures without live monitoring credentials. Monitoring, history submission and manual Worker deployment are separate. Actions currently use version tags rather than immutable commit pins; pinning is a separate hardening change, not an existing guarantee.
 
-Synthetic tokens and stable public identifiers in tests are intentional fixtures. Never substitute real credentials or private observations. Dependencies require continued review; the [dependency security record](docs/DEPENDENCY_SECURITY_REVIEW.md) is historical evidence, not a current vulnerability attestation.
+Tests use synthetic tokens and public identifiers; keep real credentials and private data out of fixtures. The [dependency security record](docs/DEPENDENCY_SECURITY_REVIEW.md) documents an earlier remediation. Dependencies still need ongoing review.
 
 ## Reliability and disclosure
 
 API acceptance does not prove phone playback. Positive seat counts do not establish eligibility. Caches, ephemeral runners and best-effort dispatch are not durable capture guarantees. See [failure boundaries](docs/ARCHITECTURE.md#failure-boundaries).
 
-Report vulnerabilities privately through an existing contact channel for the repository owner. Do not put secrets in public issues. This document does not configure a dedicated private reporting channel.
+Report vulnerabilities through an existing private contact channel for the repository owner; keep secrets out of public issues. No dedicated private reporting channel is configured.

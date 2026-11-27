@@ -2,7 +2,7 @@
 
 The deployed workflow copies completed public observations into a local per-run handoff and submits them in a separate bounded process. `health_runner.py` supervises the ordinary monitor; historical facts come directly from successful lookup results, not health-log parsing or cached state. Capture and submission each require an explicit opt-in and default off when unset.
 
-The Actions disk is temporary. This protocol preserves original facts while that disk survives; it is not a cross-run durable archive. The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) describes destination durability and [operations](../CLOUD_SETUP.md) owns repository configuration.
+The handoff survives only as long as the temporary Actions disk. The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) covers destination durability; [operations](../CLOUD_SETUP.md) lists repository configuration.
 
 ## Configured section identity
 
@@ -12,9 +12,9 @@ Each successful lookup carries the exact configured section and CRN. The [target
 
 ```mermaid
 flowchart TD
-    Health[health_runner.py: original monitoring health] --> Monitor[monitor.py: one monitoring cycle]
-    Monitor --> GMU[Original public lookups only]
-    GMU --> Completed[Actual completed course snapshots]
+    Health[health_runner.py: monitoring health] --> Monitor[monitor.py: one monitoring cycle]
+    Monitor --> GMU[Public catalog lookups]
+    GMU --> Completed[Completed course snapshots]
     Completed --> Alert[Bark decisions and seat state]
     Completed -. explicit capture opt-in .-> Pending[Sanitized local pending checkpoint]
     Pending --> Seal[Separate submitter: acquire lock and seal once]
@@ -146,9 +146,8 @@ Bark messages and health logs retain their existing behavior.
 outbox. Cloudflare outages can exhaust the bounded attempts. When that runner
 disappears, unsent or unconfirmed original bodies may disappear too. D1 retains
 committed facts, but cannot recover a sample it never received. The optional
-SQLite outbox needs surviving POSIX storage and is not used here. Accept this
-loss window explicitly or design a separately authorized durable capture source
-when evaluating stronger capture guarantees. Caches and artifacts are not durable queues.
+SQLite outbox needs surviving POSIX storage and is not used here. Stronger capture guarantees would require a durable source independent of the
+runner. Caches and artifacts are not durable queues.
 
 ## Configuration and operational control
 

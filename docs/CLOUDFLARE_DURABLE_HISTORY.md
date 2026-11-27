@@ -1,6 +1,6 @@
 # D1 ingestion design and recovery
 
-The deployed ingestion Worker accepts sanitized original check batches and commits observations and chronological opening-event repairs in one D1 transaction. It has no pending inbox, scheduled drain, persistent application host or notification side effects. [The protocol reference](CLOUD_HISTORY.md) specifies HTTP and validation; [the handoff](LIVE_HISTORY_ADAPTER.md) specifies source capture and process deadlines.
+The ingestion Worker commits sanitized check batches, observations and chronological opening-event repairs in one D1 transaction. It needs no pending inbox, scheduled drain or persistent application host and sends no notifications. The [protocol reference](CLOUD_HISTORY.md) covers HTTP and validation; the [handoff](LIVE_HISTORY_ADAPTER.md) covers capture and process deadlines.
 
 ## Design decision
 
@@ -42,7 +42,7 @@ The protocol permits 64 KiB and 50 distinct observations per check. The bulk ins
 
 Five active targets at a five-minute cadence imply about 288 checks and up to 1,440 observations per day, before failures and retries. Approximately 1,728 base rows/day excludes events, indexes, receipt/upsert work and repairs and is not a billable-write estimate. Storage grows without automatic pruning.
 
-Measure request CPU, rows read/written and retained storage. Consult current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) and [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/); no account entitlement or free-service guarantee is asserted here. Retention must preserve replay identities and recovery baselines.
+Measure request CPU, rows read/written and retained storage against current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) and [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/). Costs depend on usage and the account plan. Retention must preserve replay identities and recovery baselines.
 
 ## Failures and recovery
 
@@ -57,7 +57,7 @@ Measure request CPU, rows read/written and retained storage. Consult current [Wo
 
 For restore/replay, pause historical writers and preserve the affected database, migration ledger, Worker version and original exports. Restore into an isolated target, replay surviving original bodies, and verify UUID mappings, identities, timeline order, gaps, statuses and event edges before cutover. Replaying in time order reduces repair work; the current direct endpoint also accepts retained older facts.
 
-Production RPO/RTO has not been established. Local Miniflare recovery, restart and replay tests are not a production backup or live recovery guarantee. Historical staging restore reports are distinct from independently verified production recovery. There is no independent durable source in the deployed Actions topology; lossless capture and exactly-once delivery are not provided.
+Production recovery-point and recovery-time objectives (RPO/RTO) have not been established. Local Miniflare recovery tests and earlier staging restore reports do not establish production recovery guarantees. The deployed Actions topology has no independent durable source, so samples can be lost before receipt.
 
 ## Migration history and compatibility
 
@@ -71,7 +71,7 @@ Rollback across the 0002 boundary requires a compatible database/code pair. An o
 
 Monitor fixed ingestion conflict/unavailable categories, authentication/conflict/rate/storage failures, exhausted retries, receipt age, sample lag, active-course gaps and D1 resource usage. Historical summaries are separate from lookup health; absence of errors is not proof that submission ran. Do not route historical errors through seat-opening notifications.
 
-Read-only operator queries use bound values and restricted access:
+Read-only diagnostic queries use bound values and restricted access:
 
 ```sql
 SELECT received_at_utc FROM checks

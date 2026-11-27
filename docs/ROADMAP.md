@@ -1,6 +1,6 @@
 # Limitations and extension points
 
-The [README](../README.md) describes deployed features and verified results. These are possible extensions, not delivered capabilities or scheduled commitments.
+The [README](../README.md) describes deployed features and verified results. The table below lists current limits and possible extensions.
 
 | Area | Current limit | Possible extension |
 | --- | --- | --- |
@@ -13,4 +13,4 @@ The [README](../README.md) describes deployed features and verified results. The
 | Dashboard scale | 14,000 samples and 50 events | Pagination or aggregation before expanding workload |
 | Dependencies | Action tags, broad Python constraint, npm overrides | Independently reviewed pinning and maintenance policy |
 
-Extensions must preserve polling permission, sampling semantics and original history. Automatic registration and fabrication of missing samples remain outside scope. See [lifecycle](TERM_LIFECYCLE.md) and [historical recovery](CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery).
+Extensions must preserve polling permission, sampling semantics and original history. Automatic registration and reconstruction of unobserved samples are outside scope. See [lifecycle](TERM_LIFECYCLE.md) and [historical recovery](CLOUDFLARE_DURABLE_HISTORY.md#failures-and-recovery).

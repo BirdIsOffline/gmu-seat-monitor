@@ -1,6 +1,6 @@
 # Historical ingestion protocol
 
-This reference describes the current authenticated HTTP contract. The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) owns transaction, migration and recovery decisions; [structured handoff](LIVE_HISTORY_ADAPTER.md) owns production capture and submission. Local Python SQLite does not connect directly to D1: clients send HTTP to a Worker with a `DB` binding.
+This reference describes the authenticated HTTP contract. The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) covers transactions, migrations and recovery; [structured handoff](LIVE_HISTORY_ADAPTER.md) covers production capture and submission. Python clients send HTTP to a Worker with a `DB` binding rather than connecting directly to D1.
 
 ## Route and authentication
 
