@@ -1,5 +1,7 @@
 # GMU Seat Monitor
 
+[![CI](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/workflows/ci.yml)
+
 Read-only course availability monitoring with reservation-aware iPhone alerts and authenticated historical analytics.
 
 The monitor checks exact sections in the public GMU catalog, compares each with its previous observation, and sends Bark alerts when potentially available seats increase. GitHub Actions runs the monitor through an external five-minute dispatcher. Cloudflare Workers store sanitized observations in D1 and serve the historical dashboard.
@@ -40,6 +42,12 @@ Retirement stops polling and alerts while preserving state, observations and eve
 - Increasing candidate counts trigger notifications identifying section and CRN. Unchanged or decreasing counts stay silent while comparison state survives.
 - Actionable notifications use `sound=alarm`, `call=1`, `level=critical` and `volume=10`.
 - The dashboard shows six independent identities in 24-hour and seven-day views. All five active sections need valid recent observations for healthy aggregate freshness; retired history is excluded from that calculation.
+
+## Dashboard preview
+
+[![Synthetic dashboard preview showing six course identities, historical charts, active-course freshness and recorded coverage metrics](docs/assets/dashboard-synthetic.png)](docs/assets/dashboard-synthetic.png)
+
+*Rendered locally with synthetic observations and events; no live monitoring or production history.*
 
 ## Verified results
 
