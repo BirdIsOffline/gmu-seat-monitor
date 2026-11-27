@@ -14,7 +14,7 @@ An external dispatcher invokes GitHub Actions at a five-minute best-effort caden
 | --- | --- |
 | Exact section and CRN | Multiple sections share course numbers; title matching cannot separate state and alerts |
 | Explicit active/retired status | Stop polling without deleting facts; configuration parity is tested |
-| Reservation-aware candidates | Known reserved-only availability is non-actionable; missing metadata remains uncertain |
+| Reservation-aware candidates | Recognized counts must agree and be bounded; ambiguous metadata is non-actionable, while absent metadata remains uncertain |
 | Change-based alerts | Suppress unchanged/decreasing candidates while state survives; cold starts can notify on already-visible potential availability |
 | Separate history process | Capture/delivery failure cannot replace monitoring health or retry phone alerts |
 | Direct atomic D1 ingestion | Bounded projection requires no pending inbox, scheduled drain or persistent host |
@@ -24,13 +24,17 @@ An external dispatcher invokes GitHub Actions at a five-minute best-effort caden
 
 The [D1 design](CLOUDFLARE_DURABLE_HISTORY.md) explains immutable observations and revisable event edges. The deployed [handoff](LIVE_HISTORY_ADAPTER.md) uses temporary runner storage; the [optional outbox](HISTORY_RELIABILITY.md) requires persistent POSIX storage.
 
+Cached state must be a JSON object. Loading preserves valid active and retired entries; a missing, unreadable or non-object cache uses the existing cold-start behavior. A missing or malformed per-course entry also has no prior actionable count. This is comparison state, not a durable history source or proof of a newly opened seat.
+
+Live alerts and historical capture share reservation parsing: only recognized count keys or supported text patterns contribute, every recognized count must agree, and counts are bounded to 1,000,000. Capture reduces inputs to public counts, absent metadata or a fixed unknown marker. Direct historical validation and the ingestion Worker still enforce their own schema and bounds.
+
 ## Failure boundaries
 
 | Failure | Current behavior and limit |
 | --- | --- |
 | Catalog error | Lookup fails; completed and failed sections stay distinguishable |
 | Missing/delayed dispatch | Coverage has gaps; transient openings cannot be reconstructed |
-| Cache loss | Baseline can reset, permitting repeated cold-start alerts |
+| Missing, unreadable or invalid-shaped cache | Starts with an empty baseline; already-visible potential availability can notify again |
 | Bark error | Returns false without automatic retry; lookup health does not verify delivery |
 | Runner ends before D1 receipt | Unsubmitted facts may be permanently lost |
 | Commit with lost acknowledgement | Original UUID/body retry deduplicates accepted effects |

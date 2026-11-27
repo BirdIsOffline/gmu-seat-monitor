@@ -6,7 +6,6 @@ All network/notification integrations are mocked: no GMU polling, no Bark push.
 
 import contextlib
 import io
-import json
 import sys
 import tempfile
 import unittest

@@ -38,7 +38,7 @@ Retirement stops polling and alerts while preserving state, observations and eve
 
 ## Notifications and analytics
 
-- Known reserved-only seats do not trigger alerts. Explicit unreserved counts are capped by the total; missing reservation metadata remains uncertain, and unparseable restrictions suppress alerts.
+- Known reserved-only seats do not trigger alerts. Explicit unreserved counts are capped by the total; missing reservation metadata remains uncertain, and conflicting or unparseable restrictions suppress alerts.
 - Increasing candidate counts trigger notifications identifying section and CRN. Unchanged or decreasing counts stay silent while comparison state survives.
 - Actionable notifications use `sound=alarm`, `call=1`, `level=critical` and `volume=10`.
 - The dashboard shows six independent identities in 24-hour and seven-day views. All five active sections need valid recent observations for healthy aggregate freshness; retired history is excluded from that calculation.
@@ -51,7 +51,7 @@ Retirement stops polling and alerts while preserving state, observations and eve
 
 ## Verified results
 
-[Main CI run 45937201337](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45937201337) passed **252 tests with zero failures or skips**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
+[Main CI run 45962142154](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962142154) passed **252 tests with zero failures or skips**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
 
 The deployed six-identity dashboard passed authenticated HTTP 200 and unauthorized HTTP 401 checks, both chart ranges, five-section freshness and exact preservation of baseline history. Missing-data display was tested in the browser without production writes. The [dashboard verification record](dashboard/README.md#verification) describes chart and event-rendering limits.
 

@@ -616,5 +616,34 @@ class IT343CaptureTests(unittest.TestCase):
             notify.assert_not_called()
 
 
+
+class PublicInterpretationTests(unittest.TestCase):
+    def test_capture_and_live_alerts_agree_on_conflicts_in_both_key_orders(self):
+        for other in (3, True, -1, 1_000_001, "0"):
+            items = [("unreservedAvailable", 0), ("unreservedRemaining", other)]
+            for summary in (dict(items), dict(reversed(items))):
+                with self.subTest(summary=summary):
+                    current = row(4, summary)
+                    observation = history_capture.public_observation("202710", "17593", "341", current)
+                    self.assertEqual(observation.reserved_summary, "unknown")
+                    self.assertEqual(observation.values()[-2:], ("unknown", 0))
+                    self.assertEqual(monitor.alertable_open_seats(current), 0)
+
+    def test_capture_keeps_absent_ambiguous_and_known_counts_distinct(self):
+        cases = [(None, None, "possible", 4), ([], None, "possible", 4),
+                 ({}, None, "possible", 4), ("", None, "possible", 4),
+                 ({"studentUnreservedAvailable": 2}, "unknown", "unknown", 0),
+                 ("0 of 10 unreserved; unreserved seats remaining: 2", "unknown", "unknown", 0),
+                 ({"unreservedSeatsRemaining": 2, "studentId": PRIVATE},
+                  {"unreservedAvailable": 2}, "unreserved", 2)]
+        for summary, public, classification, potential in cases:
+            with self.subTest(summary=summary):
+                current = row(4, summary)
+                observation = history_capture.public_observation("202710", "17593", "341", current)
+                self.assertEqual(observation.reserved_summary, public)
+                self.assertEqual(observation.values()[-2:], (classification, potential))
+                self.assertEqual(monitor.alertable_open_seats(current), potential)
+                self.assertNotIn(PRIVATE, json.dumps(observation.values()))
+
 if __name__ == "__main__":
     unittest.main()

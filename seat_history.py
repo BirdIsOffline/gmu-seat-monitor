@@ -109,7 +109,7 @@ class CourseObservation:
                 raise ValueError("Reserved summary must contain only public seat counts")
         elif reserved is not None and (not isinstance(reserved, str) or len(reserved) > 2000):
             raise ValueError("Reserved summary must be public text, seat-count dict, or None")
-        unreserved = parse_unreserved(reserved)
+        unreserved = parse_unreserved(reserved, strict_bounds=True)
         potential = alertable_open_seats({
             "seatsAvailable": total, "reservedSeatSummary": reserved,
         })

@@ -231,51 +231,32 @@ def get_section(term_code, crn, course_number):
     )
 
 
-def parse_unreserved(summary):
+def parse_unreserved(summary, *, strict_bounds=False):
+    """Return an agreed, bounded count; absent/ambiguous inputs return None.
+
+    Strict historical validation rejects invalid counts instead of sanitizing them.
+    """
     if isinstance(summary, dict):
-        for key, value in summary.items():
-            normalized = re.sub(
-                r"[^a-z]",
-                "",
-                str(key).lower()
-            )
-
-            if (
-                "unreserved" in normalized
-                and any(
-                    x in normalized
-                    for x in ("available", "remaining")
-                )
-            ):
-                if (
-                    isinstance(value, int)
-                    and not isinstance(value, bool)
-                    and value >= 0
-                ):
-                    return value
-
-        return None
-
-    if not isinstance(summary, str):
-        return None
-
-    patterns = [
-        r"(\d+)\s+of\s+\d+\s+unreserved",
-        r"unreserved\s+seats?\s+(?:available|remaining)\s*[:=-]?\s*(\d+)",
-        r"unreserved\s*[:=-]\s*(\d+)\s+of\s+\d+"
-    ]
-
-    for pattern in patterns:
-        found = re.search(
-            pattern,
-            summary,
-            flags=re.IGNORECASE
+        allowed = {"unreservedAvailable", "unreservedRemaining",
+                   "unreservedSeatsAvailable", "unreservedSeatsRemaining"}
+        counts = [value for key, value in summary.items() if key in allowed]
+    elif isinstance(summary, str) and len(summary) <= 2000:
+        patterns = (
+            r"(?<![\w.+-])([+-]?[0-9]+)\s+of\s+[0-9]+\s+unreserved",
+            r"unreserved\s+seats?\s+(?:available|remaining)\s*(?:[:=]\s*|-\s+)?([+-]?[0-9]+)",
+            r"unreserved\s*[:=-]\s*([+-]?[0-9]+)\s+of\s+[0-9]+"
         )
+        counts = [int(match.group(1)) for pattern in patterns
+                  for match in re.finditer(pattern, summary, flags=re.IGNORECASE)]
+    else:
+        return None
 
-        if found:
-            return int(found.group(1))
-
-    return None
+    if any(type(value) is not int or not 0 <= value <= 1_000_000
+           for value in counts):
+        if strict_bounds:
+            raise ValueError("Invalid unreserved count")
+        return None
+    return counts[0] if counts and len(set(counts)) == 1 else None
 
 
 def snapshot(row):
@@ -336,19 +317,7 @@ def seat_message(course, data):
 
 
 def possible_eligible(data):
-    remaining = data.get("seatsAvailable")
-
-    if not isinstance(remaining, int) or remaining <= 0:
-        return False
-
-    reserved = data.get("reservedSeatSummary")
-
-    if reserved in (None, "", [], {}):
-        return True
-
-    unreserved = parse_unreserved(reserved)
-
-    return unreserved is not None and unreserved > 0
+    return alertable_open_seats(data) > 0
 
 
 def alertable_open_seats(data):
@@ -366,7 +335,7 @@ def alertable_open_seats(data):
     if (
         not isinstance(remaining, int)
         or isinstance(remaining, bool)
-        or remaining <= 0
+        or not 0 < remaining <= 1_000_000
     ):
         return 0
 
@@ -471,9 +440,10 @@ def notify(title, body, *, actionable=False):
 
 def load_state():
     try:
-        return json.loads(
-            STATE_PATH.read_text(encoding="utf-8")
-        )
+        state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            raise ValueError("Cached state must be an object")
+        return state
 
     except FileNotFoundError:
         return {}
@@ -558,15 +528,8 @@ def check_once(term_code, state, capture=None):
 
         new_open = alertable_open_seats(current)
 
-        # Notify ONLY when potentially available seats increase.
-        # This includes reserved seats becoming unreserved.
-        #
-        # Do NOT notify for:
-        # - Reserved-only seat changes
-        # - A class becoming full
-        # - Professor changes
-        # - Unrelated course changes
-        # - No seat changes
+        # Alert only on increased potential availability, including seats
+        # becoming unreserved; unrelated changes do not trigger notifications.
 
         if new_open > old_open:
             title = (
