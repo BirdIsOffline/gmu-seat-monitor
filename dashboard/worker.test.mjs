@@ -464,3 +464,139 @@ test('IT342 needs its own observation and keeps an independent SQL history', asy
     assert.equal(JSON.stringify(sql.prepare('SELECT * FROM observations WHERE crn != ?').all('17596')),before);
   }finally{sql.close()}
 });
+
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+async function requestFixture() {
+  const html = await (await worker.fetch(new Request(base + '/'), {})).text();
+  const { db } = mockDb();
+  const data = await (await worker.fetch(apiRequest('24h'), { DB: db, DASHBOARD_READ_TOKEN: token })).json();
+  const elements = new Map(), requests = [], alerts = [];
+  const element = () => ({ textContent: '', hidden: false, children: [], attributes: {}, listeners: {},
+    appendChild(child) { this.children.push(child); }, replaceChildren() { this.children = []; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, fn) { this.listeners[name] = fn; },
+    getContext() { return { scale() {}, clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fillText() {} }; } });
+  const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
+  const buttons = ['24h', '7d'].map(range => Object.assign(element(), { dataset: { range } }));
+  const context = vm.createContext({ document: { getElementById: get, createElement: element, querySelectorAll: () => buttons },
+    window: { addEventListener() {}, devicePixelRatio: 1 }, performance: { now: () => 0 },
+    Date, console, setInterval() {}, alert: message => alerts.push(message),
+    fetch: url => { const response = deferred(); requests.push({ url, ...response }); return response.promise; } });
+  vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
+  return { html, context, get, requests, alerts,
+    login() { get('token').value = token; return get('loginForm').listeners.submit({ preventDefault() {} }); },
+    range(value) { return buttons.find(btn => btn.dataset.range === value).listeners.click(); },
+    refresh() { return get('refreshHistory').listeners.click(); },
+    response(total) { return { ok: true, json: async () => ({ ...data, health: { ...data.health, total } }) }; } };
+}
+
+test('slower old range responses cannot overwrite newer data, freshness or status', async () => {
+  const f = await requestFixture();
+  const old = f.login(), latest = f.range('7d');
+  assert.match(f.requests[0].url, /range=24h$/);
+  assert.match(f.requests[1].url, /range=7d$/);
+  f.requests[1].resolve(f.response(77)); await latest;
+  const status = f.get('status').textContent, freshness = f.get('freshnessState').textContent;
+  f.requests[0].resolve(f.response(11)); await old;
+  assert.equal(f.get('checks').textContent, 77);
+  assert.equal(f.get('status').textContent, status);
+  assert.equal(f.get('freshnessState').textContent, freshness);
+  assert.equal(vm.runInContext('activeRange', f.context), '7d');
+  assert.equal(f.get('dashboard').hidden, false);
+});
+
+test('range changes also reject older responses whose JSON body resolves last', async () => {
+  const f = await requestFixture(), body = deferred();
+  let readingBody = false;
+  const old = f.login();
+  f.requests[0].resolve({ ok: true, json() { readingBody = true; return body.promise; } });
+  await new Promise(setImmediate);
+  assert.equal(readingBody, true);
+  const latest = f.range('7d');
+  f.requests[1].resolve(f.response(77)); await latest;
+  const status = f.get('status').textContent;
+  body.resolve(await f.response(11).json()); await old;
+  assert.equal(f.get('checks').textContent, 77);
+  assert.equal(f.get('status').textContent, status);
+});
+
+test('stale HTTP, network and JSON errors cannot log out or overwrite a newer range', async () => {
+  for (const failure of ['401', '503', 'network', 'json']) {
+    const f = await requestFixture(), body = deferred();
+    const old = f.login();
+    if (failure === 'json') {
+      f.requests[0].resolve({ ok: true, json: () => body.promise });
+      await new Promise(setImmediate);
+    }
+    const latest = f.range('7d');
+    f.requests[1].resolve(f.response(77)); await latest;
+    const status = f.get('status').textContent;
+    if (failure === 'network') f.requests[0].reject(new Error('old network failure'));
+    else if (failure === 'json') body.reject(new Error('old invalid JSON'));
+    else f.requests[0].resolve({ ok: false, status: Number(failure) });
+    await old;
+    assert.equal(f.get('checks').textContent, 77, failure);
+    assert.equal(f.get('status').textContent, status, failure);
+    assert.equal(f.get('status').attributes.role, 'status', failure);
+    assert.equal(f.get('dashboard').hidden, false, failure);
+    assert.equal(f.get('login').hidden, true, failure);
+    assert.equal(vm.runInContext('readToken', f.context), token, failure);
+    assert.deepEqual(f.alerts, [], failure);
+  }
+});
+
+test('the newest error remains visible when an older success arrives later', async () => {
+  const f = await requestFixture();
+  const old = f.login(), latest = f.range('7d');
+  f.requests[1].resolve({ ok: false, status: 503 }); await latest;
+  assert.match(f.get('status').textContent, /unavailable \(503\)/);
+  assert.equal(f.get('status').attributes.role, 'alert');
+  const message = f.get('status').textContent;
+  f.requests[0].resolve(f.response(11)); await old;
+  assert.equal(f.get('checks').textContent, '');
+  assert.equal(f.get('status').textContent, message);
+  assert.equal(f.get('status').attributes.role, 'alert');
+});
+
+test('request ordering also protects refreshes within the same range', async () => {
+  const f = await requestFixture();
+  const initial = f.login(); f.requests[0].resolve(f.response(1)); await initial;
+  const old = f.refresh(), latest = f.refresh();
+  assert.equal(f.requests[1].url, f.requests[2].url);
+  f.requests[2].resolve(f.response(77)); await latest;
+  const status = f.get('status').textContent;
+  f.requests[1].reject(new Error('stale refresh error')); await old;
+  assert.equal(f.get('checks').textContent, 77);
+  assert.equal(f.get('status').textContent, status);
+  assert.equal(f.get('status').attributes.role, 'status');
+});
+
+test('current authentication and refresh errors are still reported', async () => {
+  const f = await requestFixture();
+  const login = f.login(); f.requests[0].resolve({ ok: false, status: 401 }); await login;
+  assert.deepEqual(f.alerts, ['Invalid dashboard read token.']);
+  assert.equal(vm.runInContext('readToken', f.context), '');
+  assert.equal(f.get('login').hidden, false);
+  assert.equal(f.get('dashboard').hidden, true);
+  const retry = f.login(); f.requests[1].resolve(f.response(1)); await retry;
+  const refresh = f.refresh(); f.requests[2].reject(new Error('current network error')); await refresh;
+  assert.equal(f.get('status').textContent, 'current network error');
+  assert.equal(f.get('status').attributes.role, 'alert');
+});
+
+test('cards, legends and chart identities use the configured course order and colors', async () => {
+  const f = await requestFixture();
+  const chartCourses = vm.runInContext('JSON.stringify(chartCourses)', f.context);
+  assert.deepEqual(JSON.parse(chartCourses), COURSES.map(({ crn, color }) => ({ crn, color })));
+  const cards = [...f.html.matchAll(/id="label([0-9]+)"/g)].map(match => match[1]);
+  const legends = [...f.html.matchAll(/class="dot" style="background:(#[a-f0-9]+)"><\/span><span id="legend([0-9]+)"/g)].map(match => ({ color: match[1], crn: match[2] }));
+  assert.deepEqual(cards, COURSES.map(course => course.crn));
+  assert.deepEqual(legends, COURSES.map(({ crn, color }) => ({ crn, color })));
+  assert.deepEqual(COURSES.map(course => course.color), ['#6bc7ff', '#fbbf74', '#6dd5ef', '#c4a0ff', '#ff9bb5', '#7addaa']);
+});

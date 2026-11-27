@@ -1,19 +1,19 @@
 # Repository security and maintenance
 
-## Audit baseline
+## Historical audit and enforced controls
 
-The 2026-11-27 review used commit `6daf98aafc4c5700121da2e0357e1bc3ebcbd0a9`. Repository settings below are the observed baseline, not settings changed by this work.
+The 2026-11-27 review used commit `6daf98aafc4c5700121da2e0357e1bc3ebcbd0a9`. The baseline findings are retained below alongside the controls enforced after commit `b87431f264a052cf99e2571f3085cc6eb79148fb` passed Ubuntu CI.
 
-| Control | Observed baseline | Recommended configuration |
+| Control | Observed baseline | Enforced follow-up |
 | --- | --- | --- |
-| Main branch | No protection or effective ruleset | Require PRs and the offline CI check; prevent bypass, force pushes and deletion |
-| Actions | All actions allowed; full-SHA enforcement off | Exact approved SHA allowlist and full-SHA enforcement after compatible workflows merge |
-| Default workflow token | Read-only; PR creation/approval disabled | Retain |
-| External fork workflow approval | First-time contributors | All external contributors |
-| Secret scanning / push protection | Both enabled; no open secret alerts | Retain; investigate any future alert privately |
-| Dependabot | Security-update PRs disabled; alert inventory inaccessible | Confirm alert access, enable free alerts and review updates through PRs |
+| Main branch | No protection or effective ruleset | PRs, required up-to-date CI and resolved conversations; administrator enforcement; no bypass, force pushes or deletion |
+| Actions | All actions allowed; full-SHA enforcement off | Exact approved SHA allowlist and full-SHA enforcement enabled |
+| Default workflow token | Read-only; PR creation/approval disabled | Preserved |
+| External fork workflow approval | First-time contributors | All external contributor workflows require approval |
+| Secret scanning / push protection | Both enabled; no open secret alerts | Both remain enabled; no open secret alerts at verification |
+| Dependabot | Security-update PRs disabled; alert inventory inaccessible | Free dependency graph/alerts enabled; inventory accessible with zero open alerts at verification; automatic update PRs remain disabled |
 
-The alert-state endpoint returned 404 and detailed Dependabot alerts returned 403. Their complete status requires confirmation in repository settings; this audit does not claim that there are no dependency alerts.
+The original alert-state and inventory requests returned 404/403. Follow-up verification confirmed enabled alerts and accessible inventory. These historical access failures do not describe the enforced settings; alert counts are point-in-time findings.
 
 ## Local workflow and dependency controls
 
@@ -29,17 +29,17 @@ At review time:
 
 These are point-in-time advisory checks. Hashes verify selected artifacts, not the absence of malicious upstream code. Python/Node patch releases, `ubuntu-latest` and hosted tooling still change; the build is not fully hermetic.
 
-## Solo-maintainer repository settings
+## Enforced repository settings
 
-Apply an active rule to `main` with no routine bypass, including administrators:
+The active `main` protection has no routine bypass, including administrators:
 
-- Require a pull request with **zero required approving reviews**. Do not require code-owner review or approval of the latest push by another person.
-- Require `Offline tests (Python 3.12, Node 24)` from GitHub Actions, with the branch up to date before merging. Do not require the operational `check-seats` or `test-bark` jobs.
-- Require resolved conversations. Block force pushes and branch deletion.
+- Pull requests with **zero required approving reviews**, no code-owner review and no independent latest-push approval.
+- Required GitHub Actions check: `Offline tests (Python 3.12, Node 24)`, with up-to-date branches. Operational monitoring jobs are not merge requirements.
+- Resolved conversations; blocked force pushes and branch deletion.
 
-Retain read-only default workflow permissions and disabled workflow PR creation/approval. Require approval for **all external contributor workflows**. Approval allows untrusted CI code to run; inspect workflow changes before approving.
+Default workflow permissions are read-only, workflow PR creation/approval is disabled, and **all external contributor workflows** require approval. Approval allows untrusted CI code to run; inspect workflow changes before approving.
 
-After both compatible workflows merge, select only these external action references, with GitHub-wide and verified-publisher allowances disabled:
+Only these external action references are allowed; GitHub-wide and verified-publisher allowances are disabled:
 
 ```text
 actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -51,7 +51,7 @@ actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
 actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
 ```
 
-Enable full-length SHA enforcement only after verifying every `uses:` entry on the deployed default branch. Older refs and reruns with tag-based workflows will then be incompatible. Keep secret scanning and push protection enabled. Dependency graph and Dependabot alerts are free for public repositories; confirm their state before relying on them. No paid security feature is required.
+Full-length SHA enforcement is enabled after verification of every deployed `uses:` entry. Older refs and tag-based reruns are incompatible. Secret scanning, push protection and free dependency alerts remain enabled. No paid feature or automatic dependency merge is configured.
 
 ## Public execution boundaries
 
@@ -61,21 +61,20 @@ The operational workflow remains separately dispatched and gated by `GMU_POLLING
 
 The scheduler, five-minute cadence, cache keys, concurrency, history deadlines, course lifecycle and alert logic are unchanged. Dashboard access continues to use a separate token. Application-level rate limiting, per-user dashboard access and production recovery objectives remain documented limitations.
 
-## Validation and rollout
+## Validation and operational verification
 
-1. Review the local diff and package/action provenance; run the [offline suite](LOCAL_DEMO.md). Publish through a PR and require the full Ubuntu CI suite before merging.
-2. Verify the merged main CI and observe the next normally scheduled run. Do not dispatch a monitoring or notification test for this rollout.
-3. Configure main protection and external-contributor approval. Verify the exact action allowlist and enable SHA enforcement only after workflow compatibility is confirmed.
-4. Verify secret scanning, push protection and Dependabot alert availability. Preserve redacted verification evidence privately.
+The [PR CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45961850766) and [merged main CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962142154) each passed all **252 tests with zero failures or skips**. All three corrected Git-ignore tests passed on Ubuntu. Hash-verified Python installation took two seconds on the PR run and one second on main; jobs completed in 52 and 51 seconds within the unchanged five-minute timeout.
 
-All 145 Windows-supported Python tests and 25 dashboard tests pass with zero failures or skips. The three Git-ignore tests now send explicit UTF-8 LF bytes to Git and decode its output; their assertions and coverage are unchanged.
+Naturally scheduled monitoring succeeded [before enforcement](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962958385) and [after enforcement](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45964230251), using the approved commit. Both runs passed all five active lookups and recorded successful history ingestion under the pinned actions and hash-verified dependencies. No manual monitoring dispatch or notification test was used for this verification. These runs verify operation at those times, not uninterrupted future delivery.
 
-Official actionlint v1.7.12 passes both workflows after verification against the release checksum list and GitHub asset digest. All nine action references and 13 PyPI artifact hashes were reverified. Hash-checked target installations for Windows/Linux Python 3.12 succeeded. These package checks do not execute Linux code. No Linux runtime was available locally; full Ubuntu PR CI is required before merging.
+Before publication, all 145 Windows-supported Python tests and 25 dashboard tests passed. The three Git-ignore tests send explicit UTF-8 LF bytes to Git and decode its output without changing assertions. No Linux runtime was available locally; the subsequent full Ubuntu runs completed that validation.
 
-A paired uncached Windows install measured no additional installation cost from hash checking. Hosted job timeouts remain unchanged; network delays and runner variability can still exhaust the existing shared budget. No repository setting or hosted service was changed.
+Official actionlint v1.7.12 passed both workflows after release checksum and asset-digest verification. All nine action references and 13 PyPI artifact hashes were reverified. Hash-checked Windows/Linux Python 3.12 target installations succeeded; target installation alone does not execute Linux code. A paired uncached Windows install measured no additional installation cost from hash checking. Network and runner variability can still exhaust job budgets.
+
+The original audit changed no hosted services. The separately approved follow-up enforced the repository controls above without changing monitoring credentials, cadence, targets, alerts, database or dashboard deployment.
 
 ## Updates and rollback
 
 For an update, resolve action tags in the official repository, verify the commit and action path, and obtain package hashes from PyPI. Review advisories, rerun Windows/Linux resolution and tests, then use a PR. `npm ci` consumes the lockfile; never use an unreviewed force upgrade to clear an audit.
 
-Before publication, discard only the reviewed local changes if they are rejected. After publication, use a new corrective or revert PR; preserve history, credentials, cache state and D1. Keep immutable action pins and use a known-safe, hash-locked dependency set. Do not restore an affected Certifi release or the broad Requests constraint. Update the allowlist for an approved replacement SHA before merging it; do not disable integrity checks to make a failing run pass.
+Use a new corrective or revert PR; preserve history, credentials, cache state and D1. Keep immutable action pins and use a known-safe, hash-locked dependency set. Do not restore an affected Certifi release or the broad Requests constraint. Update the allowlist for an approved replacement SHA before merging it; do not disable integrity checks to make a failing run pass.

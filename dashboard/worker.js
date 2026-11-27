@@ -1,12 +1,12 @@
 // Read-only, token-gated dashboard. Deploy as a separate Worker; never reuse the ingestion token.
 // Keep statuses aligned with monitor.py; an offline parity test enforces this.
 export const COURSES = [
-  {"crn": "17582", "name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "retired"},
-  {"crn": "17593", "name": "IT 341 DL1", "number": "341", "section": "DL1", "status": "active"},
-  {"crn": "17596", "name": "IT 342 DL1", "number": "342", "section": "DL1", "status": "active"},
-  {"crn": "17599", "name": "IT 343 DL1", "number": "343", "section": "DL1", "status": "active"},
-  {"crn": "20981", "name": "IT 343 DL2", "number": "343", "section": "DL2", "status": "active"},
-  {"crn": "21051", "name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active"}
+  {"crn": "17582", "name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "retired", "color": "#6bc7ff"},
+  {"crn": "17593", "name": "IT 341 DL1", "number": "341", "section": "DL1", "status": "active", "color": "#fbbf74"},
+  {"crn": "17596", "name": "IT 342 DL1", "number": "342", "section": "DL1", "status": "active", "color": "#6dd5ef"},
+  {"crn": "17599", "name": "IT 343 DL1", "number": "343", "section": "DL1", "status": "active", "color": "#c4a0ff"},
+  {"crn": "20981", "name": "IT 343 DL2", "number": "343", "section": "DL2", "status": "active", "color": "#ff9bb5"},
+  {"crn": "21051", "name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active", "color": "#7addaa"}
 ];
 const IDS = COURSES.map(course => course.crn);
 const PLACEHOLDERS = IDS.map(() => '?').join(', ');
@@ -28,8 +28,8 @@ button{background:#255fdb;color:white;border:0;padding:11px 16px;cursor:pointer}
 #rangeButtons{display:flex;gap:8px}#status{min-height:22px;font-size:.88rem;color:#bdd4ff}#status[role="alert"]{color:#ffb4b4}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.cadence-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:12px}.metric{border:1px solid #28364e;border-radius:12px;padding:16px;background:#111827}
 .metric .label{color:#a3adbf;font-size:.81rem}.metric strong{font-size:1.6rem;display:block;margin-top:7px;font-variant-numeric:tabular-nums}
-.key{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#aeb9ce}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:#6bc7ff}
-.dot.second{background:#fbbf74}.dot.third{background:#7addaa}.dot.fourth{background:#c4a0ff}.dot.fifth{background:#ff9bb5}.dot.sixth{background:#6dd5ef}.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
+.key{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:#aeb9ce}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+.chart{position:relative;overflow:hidden}canvas{width:100%;height:300px;display:block}
 table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td{padding:11px 7px;border-bottom:1px solid #26334a}th{color:#aeb9ce;font-weight:600}
 .note{color:#c6d1df;font-size:.85rem;line-height:1.5}.scroll{overflow-x:auto}#freshnessState{font-weight:750}#freshnessState.healthy{color:#7addaa}#freshnessState.delayed{color:#ffcd78}#freshnessState.stale{color:#ff9992}#freshnessState.unknown{color:#bac7dc}
 @media(max-width:700px){.metrics,.cadence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px 14px 45px}canvas{height:240px}table{font-size:.75rem}}
@@ -45,12 +45,7 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <section class="metrics" aria-label="Dashboard summary">
 <div class="metric"><div class="label">Stored checks (selected window)</div><strong id="checks">—</strong></div>
 <div class="metric"><div class="label">Recorded check success · all courses</div><strong id="rate">—</strong></div>
-<div class="metric"><div class="label" id="label17582">IT 304 DL1 · 17582 · Last stored total</div><strong id="it17582">—</strong></div>
-<div class="metric"><div class="label" id="label17593">IT 341 DL1 · 17593 · Last stored total</div><strong id="it17593">—</strong></div>
-<div class="metric"><div class="label" id="label17596">IT 342 DL1 · 17596 · Last stored total</div><strong id="it17596">—</strong></div>
-<div class="metric"><div class="label" id="label17599">IT 343 DL1 · 17599 · Last stored total</div><strong id="it17599">—</strong></div>
-<div class="metric"><div class="label" id="label20981">IT 343 DL2 · 20981 · Last stored total</div><strong id="it20981">—</strong></div>
-<div class="metric"><div class="label" id="label21051">IT 343 DL3 · 21051 · Last stored total</div><strong id="it21051">—</strong></div></section>
+${COURSES.map(course => `<div class="metric"><div class="label" id="label${course.crn}">${course.name} · ${course.crn} · Last stored total</div><strong id="it${course.crn}">—</strong></div>`).join('\n')}</section>
 <section class="panel" style="margin-top:18px" aria-label="Stored history freshness">
 <h2>Active-course freshness · <span id="freshnessState" class="unknown" aria-live="polite">Not checked</span></h2>
 <p id="freshnessAge" class="note">Load history to see active-course observation freshness.</p>
@@ -68,7 +63,7 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 <div class="metric"><div class="label">Gaps over 15 min</div><strong id="gap15">—</strong></div>
 </div>
 <p class="note">Calculated only between consecutive checks stored in the selected window. Does not measure missed triggers before the first record or after the last record, and does not prove every scheduled run occurred. Durations are in minutes.</p></section>
-<section class="panel"><h2>Total seats reported over time</h2><div class="key"><span><span class="dot"></span><span id="legend17582">IT 304 DL1 · 17582</span></span><span><span class="dot second"></span><span id="legend17593">IT 341 DL1 · 17593</span></span><span><span class="dot sixth"></span><span id="legend17596">IT 342 DL1 · 17596</span></span><span><span class="dot fourth"></span><span id="legend17599">IT 343 DL1 · 17599</span></span><span><span class="dot fifth"></span><span id="legend20981">IT 343 DL2 · 20981</span></span><span><span class="dot third"></span><span id="legend21051">IT 343 DL3 · 21051</span></span></div>
+<section class="panel"><h2>Total seats reported over time</h2><div class="key">${COURSES.map(course => `<span><span class="dot" style="background:${course.color}"></span><span id="legend${course.crn}">${course.name} · ${course.crn}</span></span>`).join('')}</div>
 <div class="chart"><canvas id="chart" role="img" aria-label="Line chart of reported total available seats for configured active and retired courses"></canvas></div>
 <p class="note">These are periodic snapshots, not exact seat-opening times. A line does not guarantee seats remained available between checks. Gaps over 15 minutes break the line. An unknown unreserved count must never be interpreted as seats available for general registration.</p></section>
 <section class="panel"><h2>Latest stored course snapshots · all history</h2><div class="scroll"><table><thead><tr><th>Course</th><th>Monitoring</th><th>Sample time (local)</th><th>Total</th><th>Unreserved</th><th>Classification</th></tr></thead><tbody id="latestRows"><tr><td colspan="6">No data loaded.</td></tr></tbody></table></div></section>
@@ -77,6 +72,8 @@ table{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}th,td
 </main>
 <script>
 'use strict';
+const chartCourses = ${JSON.stringify(COURSES.map(({crn, color}) => ({crn, color}))).replace(/</g, '\\u003c')};
+let latestRequest = 0;
 let readToken = '';
 let activeRange = '24h';
 let samples = [];
@@ -97,10 +94,15 @@ function paintFreshness(){
  byId('freshnessAge').textContent=age===null?(state==='clock_error'?'Stored timestamp is invalid or too far in the future.':state==='inactive'?'All configured courses are retired.':'No observations found for an active course.'):'Limiting active-course observation is '+age.toFixed(1)+' minutes old.';
 }
 async function load(){
+ const request=++latestRequest,range=activeRange;
  setStatus('Loading recorded samples...',false);
- const resp=await fetch('/api/dashboard?range='+encodeURIComponent(activeRange),{headers:{Authorization:'Bearer '+readToken},cache:'no-store'});
+ try{
+ const resp=await fetch('/api/dashboard?range='+encodeURIComponent(range),{headers:{Authorization:'Bearer '+readToken},cache:'no-store'});
+ if(request!==latestRequest)return;
  if(!resp.ok){throw new Error(resp.status===401?'Invalid dashboard read token.':'Dashboard data is unavailable ('+resp.status+').')}
- const data=await resp.json();samples=data.samples;
+ const data=await resp.json();
+ if(request!==latestRequest)return;
+ samples=data.samples;
  freshnessSnapshot=data.freshness;
  freshnessUpdatedAt=performance.now();
  byId('freshnessTime').textContent='Last stored check (all courses; separate from active freshness): '+fmtTime(data.health.latest_overall)+'. Snapshot retrieved: '+fmtTime(data.generated_at_utc)+'.';
@@ -126,6 +128,7 @@ async function load(){
  for(const e of data.events){const course=data.courses.find(c=>c.crn===e.crn);eventsBody.appendChild(row([fmtTime(e.detected_at_utc),course?course.name+' · '+e.crn:e.crn,e.previous_available,e.new_available,e.classification]))}
  byId('coverage').textContent='Coverage: '+data.health.total+' stored checks ('+data.health.failed+' failed); '+data.courses.filter(c=>c.status==='active').length+' active / '+data.courses.filter(c=>c.status==='retired').length+' retired courses; '+samples.length+' returned course observations. Last recorded check: '+fmtTime(data.health.latest)+'. Missing scheduled runs are not included in this success rate.';
  drawChart();setStatus('Historical samples loaded. Last refreshed '+new Date().toLocaleTimeString()+'.',false);
+ }catch(error){if(request===latestRequest)throw error}
 }
 function drawChart(){
  const canvas=byId('chart');const dpr=Math.min(window.devicePixelRatio||1,2);const width=canvas.clientWidth||700;const height=canvas.clientHeight||300;
@@ -138,7 +141,7 @@ function drawChart(){
  ctx.font='12px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#30405b';ctx.fillStyle='#b5bfce';
  for(let i=0;i<=3;i++){const y=top+plotH*i/3;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(width-right,y);ctx.stroke();ctx.fillText(String(Math.round(ymax*(3-i)/3)),5,y+4)}
  for(let i=0;i<=4;i++){const x=left+plotW*i/4;const stamp=new Date(start+(now-start)*i/4);ctx.fillText(activeRange==='24h'?stamp.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):stamp.toLocaleDateString([],{month:'short',day:'numeric'}),Math.max(2,x-27),height-9)}
- for(const [crn,color] of [['17582','#6bc7ff'],['17593','#fbbf74'],['17596','#6dd5ef'],['17599','#c4a0ff'],['20981','#ff9bb5'],['21051','#7addaa']]){
+ for(const {crn,color} of chartCourses){
  const points=samples.filter(s=>s.crn===crn).sort((a,b)=>a.observed_at_utc.localeCompare(b.observed_at_utc));
  ctx.lineWidth=2.5;ctx.strokeStyle=color;let previous=null;
  for(const p of points){const ms=new Date(p.observed_at_utc).getTime();if(!Number.isFinite(ms)||ms<start||ms>now||p.total_available===null){previous=null;continue}

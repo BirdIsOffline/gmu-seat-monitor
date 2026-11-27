@@ -12,7 +12,7 @@ The D1 binding is a normal binding, not an SQL-enforced read-only role. Fixed SE
 
 ## Section identities
 
-Cards, legends and series use CRNs rather than course numbers. The deployed [target table](../README.md#section-identity-and-lifecycle) has five active sections and one retired section. Every section, including the three IT 343 sections, has its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
+Cards, legends and chart identities derive from the dashboard course configuration and use CRNs rather than course numbers. The deployed [target table](../README.md#section-identity-and-lifecycle) has five active sections and one retired section. Every section, including the three IT 343 sections, has its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
 
 Retired history remains queryable. Latest snapshots can predate the selected chart window and are labelled history-only. Status is current configuration, separate from historical observations.
 
@@ -29,7 +29,7 @@ Freshness uses each active section's latest observation across all history and s
 | Clock issue | An active timestamp is invalid or more than two minutes ahead |
 | Inactive | Every section is retired |
 
-The browser ages status once a minute but loads new records only on login, explicit refresh or range change. Success and cadence cover stored checks; they do not count missing dispatches or prove notifications. Cadence uses `LAG` only inside the selected window.
+The browser ages status once a minute but loads new records only on login, explicit refresh or range change. Only the latest request can update the view or report an error; late responses from an earlier range or refresh are ignored. Success and cadence cover stored checks; they do not count missing dispatches or prove notifications. Cadence uses `LAG` only inside the selected window.
 
 ## Presentation and bounds
 
@@ -41,7 +41,7 @@ The browser ages status once a minute but loads new records only on login, expli
 
 ## Verification
 
-The latest [main CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45937201337) passed all 25 dashboard tests as part of the 252-test suite. Tests cover authentication, fixed SQL, section isolation, freshness, missing data, rendering and a 12,096-row seven-day fixture.
+The last published [main CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962142154) passed all 25 dashboard tests as part of the 252-test suite. Tests cover authentication, fixed SQL, section isolation, freshness, missing data, rendering and a 12,096-row seven-day fixture.
 
 Live verification of the deployed six-identity release confirmed:
 

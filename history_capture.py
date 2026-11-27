@@ -51,17 +51,7 @@ def public_observation(term, crn, number, current):
     if summary in (None, "", [], {}):
         reserved = None
     else:
-        # Only strings or recognized count keys can contribute a public count.
-        if isinstance(summary, dict):
-            allowed = {"unreservedAvailable", "unreservedRemaining",
-                       "unreservedSeatsAvailable", "unreservedSeatsRemaining"}
-            counts = [v for k, v in summary.items() if k in allowed
-                      and type(v) is int and 0 <= v <= 1_000_000]
-            count = counts[0] if counts and len(set(counts)) == 1 else None
-        elif isinstance(summary, str) and len(summary) <= 2000:
-            count = parse_unreserved(summary)
-        else:
-            count = None
+        count = parse_unreserved(summary)
         reserved = ({"unreservedAvailable": count}
                     if type(count) is int and 0 <= count <= 1_000_000 else "unknown")
     return CourseObservation(term, "IT", number, course_section(crn, number), crn, total, reserved)

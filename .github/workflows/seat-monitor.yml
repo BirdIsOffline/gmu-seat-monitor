@@ -39,7 +39,7 @@ jobs:
 
   check-seats:
     # No unattended GMU requests until explicit authorization is recorded.
-    if: vars.GMU_POLLING_APPROVED == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'check'))
+    if: vars.GMU_POLLING_APPROVED == 'true' && github.event_name == 'workflow_dispatch' && inputs.mode == 'check'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
