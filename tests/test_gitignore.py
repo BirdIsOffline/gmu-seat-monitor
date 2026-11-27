@@ -19,11 +19,11 @@ class HistoricalFileExclusionTests(unittest.TestCase):
     def ignored(self, paths):
         result = subprocess.run(
             ["git", "-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "--stdin"],
-            cwd=self.root, input="\n".join(paths) + "\n", text=True,
+            cwd=self.root, input=("\n".join(paths) + "\n").encode("utf-8"),
             capture_output=True, check=False,
         )
         self.assertIn(result.returncode, (0, 1), result.stderr)
-        return set(result.stdout.splitlines())
+        return set(result.stdout.decode("utf-8").splitlines())
 
     def test_database_replay_backup_lock_and_journal_variants_are_ignored(self):
         paths = []
