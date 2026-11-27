@@ -601,16 +601,16 @@ class RetiredCourseCaptureTests(unittest.TestCase):
 
 
 class IT343CaptureTests(unittest.TestCase):
-    def test_capture_keeps_all_four_active_sections_separate(self):
+    def test_capture_keeps_all_five_active_sections_separate(self):
         with tempfile.TemporaryDirectory() as tmp:
             capture=CheckCapture(Path(tmp)/"handoff");self.addCleanup(capture.close)
             reference={"seatsAvailable":16,"reservedSeatSummary":"0 of 16 unreserved; 16 of 16 reserved"}
-            with (patch.object(monitor,"get_section",side_effect=[row(0),reference,reference,reference]),
+            with (patch.object(monitor,"get_section",side_effect=[row(0),reference,reference,reference,reference]),
                   patch.object(monitor,"save_state"),patch.object(monitor,"notify") as notify,
                   patch.object(monitor.time,"sleep"),contextlib.redirect_stdout(io.StringIO())):
                 capture.finish(monitor.check_once("202710",{},capture))
             body=json.loads(read_prepared(capture.directory,"pending.json").body)
-            self.assertEqual([(o["crn"],o["section"]) for o in body["observations"]],[("17593","DL1"),("17599","DL1"),("20981","DL2"),("21051","DL3")])
+            self.assertEqual([(o["crn"],o["section"]) for o in body["observations"]],[("17593","DL1"),("17596","DL1"),("17599","DL1"),("20981","DL2"),("21051","DL3")])
             for observation in body["observations"][1:]:
                 self.assertEqual(observation["reserved_summary"],{"unreservedAvailable":0})
             notify.assert_not_called()

@@ -140,6 +140,11 @@ def section_row(crn, unreserved=0, reserved=16):
 
 
 class IT343MultiSectionTests(unittest.TestCase):
+    def setUp(self):
+        original = {crn:c for crn,c in monitor.COURSES.items() if crn != "17596"}
+        self.enterContext(patch.object(monitor,"COURSES",original))
+        self.enterContext(patch.object(health_runner,"COURSES",original))
+
     def test_all_sections_are_active_and_have_distinct_exact_identities(self):
         self.assertEqual(list(monitor.active_courses()), ["17593", "17599", "20981", "21051"])
         self.assertEqual(monitor.COURSES["17582"]["status"], "retired")

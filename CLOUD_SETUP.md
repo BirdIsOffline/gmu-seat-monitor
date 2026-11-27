@@ -28,7 +28,7 @@ To pause polling, stop external dispatch and set `GMU_POLLING_APPROVED=false`, o
 
 ## Course retirement and release
 
-The [target table](README.md#section-identity-and-lifecycle) has four active sections and one retired section. Matching requires the exact term, subject, number, section and CRN. CRNs distinguish sections with the same course number.
+The [target table](README.md#section-identity-and-lifecycle) has five active sections and one retired section. Matching requires the exact term, subject, number, section and CRN. CRNs distinguish sections with the same course number.
 
 Maintain statuses in `monitor.py` and `dashboard/worker.js`; CI verifies parity. Retirement excludes lookups and alerts but preserves state, observations, delayed historical ingestion and events. Invalid status fails validation. All-retired configuration exits without catalog lookups or capture.
 

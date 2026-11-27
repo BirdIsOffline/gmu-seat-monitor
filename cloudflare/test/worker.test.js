@@ -560,3 +560,16 @@ test("same-number IT343 sections retain independent identities, events and repla
   assert.equal((await send(duplicate)).status,400);
   assert.deepEqual(await rows("observations"),committed);
 });
+
+
+test("IT342 ingestion preserves existing identities and deduplicates its own history", async () => {
+  const old=payload({observations:[course(),course({crn:'17593',course_number:'341'}),...['17599','20981','21051'].map((crn,i)=>course({crn,course_number:'343',section:'DL'+(i+1)}))]});
+  assert.equal((await send(old)).status,200);const before=await rows('observations');
+  const target=count=>course({crn:'17596',course_number:'342',section:'DL1',total_available:4,reserved_summary:{unreservedAvailable:count,reservedAvailable:4-count}});
+  assert.equal((await send(payload({executed_at_utc:'2026-11-09T00:05:00.000000+00:00',observations:[target(0)]}))).status,200);
+  assert.equal((await rows('opening_events')).length,0);
+  const opening=payload({executed_at_utc:'2026-11-09T00:10:00.000000+00:00',observations:[target(1)]});
+  assert.equal((await send(opening)).status,200);assert.equal((await send(opening)).status,200);
+  const after=await rows('observations');assert.deepEqual(after.filter(o=>o.crn!=='17596'),before);
+  assert.equal(after.filter(o=>o.crn==='17596').length,2);assert.equal((await rows('opening_events')).length,1);
+});

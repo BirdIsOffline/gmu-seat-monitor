@@ -12,7 +12,7 @@ The D1 binding is a normal binding, not an SQL-enforced read-only role. Fixed SE
 
 ## Section identities
 
-Cards, legends and series use CRNs rather than course numbers. The [target table](../README.md#section-identity-and-lifecycle) has four active sections and one retired section. Each IT 343 section retains its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
+Cards, legends and series use CRNs rather than course numbers. The [target table](../README.md#section-identity-and-lifecycle) has five active sections and one retired section. Each IT 343 section retains its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
 
 Retired history remains queryable. Latest snapshots can predate the selected chart window and are labelled history-only. Status is current configuration, separate from historical observations.
 
@@ -35,12 +35,12 @@ The browser ages status once a minute but loads new records only on login, expli
 
 - The 24-hour and seven-day views retain active and retired identities.
 - Unknown unreserved availability remains unknown, not zero or confirmed eligibility.
-- The sample query returns at most 12,000 chronological rows. This covers the current five-minute workload, not unlimited export. Larger workloads require a revised query contract.
+- The sample query returns at most 14,000 chronological rows. This covers the current five-minute workload, not unlimited export. Larger workloads require a revised query contract.
 - Chart segments break across gaps over 15 minutes. A single observation has no connecting segment. Times are browser-local.
 - Events are capped at 50 recent sampled increases. Delayed samples can revise edges; events never generate notifications.
 
 ## Verification
 
-Hosted tests cover authentication, fixed SQL, independent identities, missing/stale states, rendering and an 8,064-row seven-day fixture. Live checks confirmed both ranges, five series, retained baseline history and zero JavaScript errors. Browser-only omission replay verified missing-data display without production writes. No historical opening events existed, so live event-row rendering remains unexercised; the empty state and synthetic event rendering were checked.
+Regression tests cover authentication, fixed SQL, independent identities, missing/stale states, rendering and a 12,096-row seven-day fixture. Live checks of the preceding five-identity release confirmed both ranges, five series, retained baseline history and zero JavaScript errors. Browser-only omission replay verified missing-data display without production writes. No historical opening events existed, so live event-row rendering remains unexercised; the empty state and synthetic event rendering were checked.
 
 Run `node --check dashboard/worker.js` and `node --test dashboard/worker.test.mjs`. These use mocks, disposable SQLite and a DOM substitute. See the [deployment runbook](DEPLOYMENT.md).

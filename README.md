@@ -28,6 +28,7 @@ The current configuration is scoped to Spring 2027:
 | --- | --- | --- |
 | IT 304 DL1 | 17582 | Retired; history only |
 | IT 341 DL1 | 17593 | Active |
+| IT 342 DL1 | 17596 | Active |
 | IT 343 DL1 | 17599 | Active |
 | IT 343 DL2 | 20981 | Active |
 | IT 343 DL3 | 21051 | Active |
@@ -36,19 +37,21 @@ Comparison state and dashboard identities use CRNs, not course numbers. Historic
 
 Retirement stops new lookups and seat alerts without deleting cached snapshots, observations or events. Status changes are explicit; no section is retired automatically. [Lifecycle guidance](docs/TERM_LIFECYCLE.md) covers archival and the single-term limitation.
 
+IT 342 (Operating Systems Fundamentals) is included in the source configuration. Its dashboard presentation requires an independent deployment; existing live verification below describes the preceding release.
+
 ## Notifications and analytics
 
 - Known reserved-only availability does not trigger an opening alert. Explicit unreserved counts are capped by the reported total. Missing reservation metadata is uncertain potential availability; unparseable restrictions suppress the candidate count.
 - Increasing candidate counts trigger alerts identifying section and CRN. Unchanged or decreasing counts remain silent while comparison state survives.
 - Actionable alerts request `sound=alarm`, `call=1`, `level=critical` and `volume=10`. Bark acceptance does not prove iPhone delivery or playback; permissions and device settings still apply.
-- The dashboard presents all five identities in 24-hour and seven-day views. Each active section independently contributes to freshness; a recent check or another section cannot conceal missing observations.
+- The dashboard presents all six configured identities in 24-hour and seven-day views. Each active section independently contributes to freshness; a recent check or another section cannot conceal missing observations.
 - Stored-check success, cadence and freshness describe recorded samples, not guaranteed scheduler uptime, notification delivery or registration outcomes.
 
 ## Verified results
 
-[Hosted Ubuntu CI](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45922191176) passed **244 automated tests with zero skips**: 192 Python, 28 Worker/D1 integration and 24 dashboard tests. Coverage includes section isolation, reservation filtering, duplicate suppression, immutable retries, transaction rollback, delayed observations, process interruption, locking and dashboard rendering.
+The current regression suite contains **252 automated tests**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. Full Ubuntu CI validates the complete suite; Windows validation covers only the supported subset. The [professional presentation baseline](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45927331399) passed 244 tests with zero skips before the IT 342 additions. Coverage includes section isolation, reservation filtering, duplicate suppression, immutable retries, transaction rollback, delayed observations, process interruption, locking and dashboard rendering.
 
-The deployed dashboard was checked for authenticated HTTP 200, unauthorized HTTP 401, five independent identities, four-target freshness, both chart ranges and preservation of every baseline historical row. Missing-data behavior was exercised through browser-only replay without production writes. A separately labelled live Bark alarm test received API acceptance, and the operator confirmed successful alarm playback with approximately 20 seconds of persistent ringing. It was a controlled notification test, not a genuine seat opening with the new alarm settings. This does not establish registration success or guarantee future phone delivery.
+The five-identity dashboard release was checked for authenticated HTTP 200, unauthorized HTTP 401, five independent identities, four-target freshness, both chart ranges and preservation of every baseline historical row. Missing-data behavior was exercised through browser-only replay without production writes. A separately labelled live Bark alarm test received API acceptance, and the operator confirmed successful alarm playback with approximately 20 seconds of persistent ringing. It was a controlled notification test, not a genuine seat opening with the new alarm settings. This does not establish registration success or guarantee future phone delivery.
 
 ## Run offline
 

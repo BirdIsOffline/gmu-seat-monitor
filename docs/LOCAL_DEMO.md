@@ -15,7 +15,7 @@ node --check dashboard/worker.js
 node --test dashboard/worker.test.mjs
 ```
 
-The hosted baseline is **244 tests, zero skips**: 192 Python, 28 Worker/D1 integration and 24 dashboard tests. Mocks and loopback integration establish protocol behavior, not guaranteed live availability. Use the committed npm lockfile.
+The current suite contains **252 tests**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. The preceding professional presentation baseline passed 244 hosted tests with zero skips. Mocks and loopback integration establish protocol behavior, not guaranteed live availability. Use the committed npm lockfile.
 
 ## Demonstrations
 
