@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The [target table](../README.md#section-identity-and-lifecycle) has four active Spring 2027 sections and one retired section. Each identity declares number, section, name and status in monitor and dashboard configuration; CI checks parity.
+The [target table](../README.md#section-identity-and-lifecycle) has five active Spring 2027 sections and one retired section. Each identity declares number, section, name and status in monitor and dashboard configuration; CI checks parity.
 
 Only active identities are polled or notified. Retirement preserves state, observations, events and queries. The dashboard labels retired history and excludes it from active freshness. Status changes do not rewrite historical facts. No section retires automatically.
 

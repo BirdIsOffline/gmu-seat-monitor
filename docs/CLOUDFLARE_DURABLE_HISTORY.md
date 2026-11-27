@@ -40,7 +40,7 @@ There is no lateness cutoff or full timeline rebuild during ingestion. Indexed p
 
 The protocol permits 64 KiB and 50 distinct observations per check. The bulk insert remains two D1 API statements; per-observation trigger work is at most one edge deletion and two insertions. This input cap is not a guarantee that every request fits an account's CPU budget.
 
-Four active targets at a five-minute cadence imply about 288 checks and up to 1,152 observations per day, before failures and retries. Approximately 1,440 base rows/day excludes events, indexes, receipt/upsert work and repairs and is not a billable-write estimate. Storage grows without automatic pruning.
+Five active targets at a five-minute cadence imply about 288 checks and up to 1,440 observations per day, before failures and retries. Approximately 1,728 base rows/day excludes events, indexes, receipt/upsert work and repairs and is not a billable-write estimate. Storage grows without automatic pruning.
 
 Measure request CPU, rows read/written and retained storage. Consult current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) and [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/); no account entitlement or free-service guarantee is asserted here. Retention must preserve replay identities and recovery baselines.
 

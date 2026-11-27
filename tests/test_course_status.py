@@ -189,10 +189,10 @@ class CourseStatusTests(unittest.TestCase):
 
 
 class CurrentCourseConfigurationTests(unittest.TestCase):
-    def test_configuration_keeps_retired_history_and_four_active_targets(self):
-        self.assertEqual(set(monitor.COURSES), {"17582", "17593", "17599", "20981", "21051"})
+    def test_configuration_keeps_retired_history_and_five_active_targets(self):
+        self.assertEqual(set(monitor.COURSES), {"17582", "17593", "17596", "17599", "20981", "21051"})
         self.assertEqual(monitor.COURSES["17582"]["status"], "retired")
-        self.assertEqual(list(monitor.active_courses()), ["17593", "17599", "20981", "21051"])
+        self.assertEqual(list(monitor.active_courses()), ["17593", "17596", "17599", "20981", "21051"])
 
     def test_dashboard_statuses_match_monitor_configuration(self):
         source = (ROOT / "dashboard/worker.js").read_text(encoding="utf-8")
