@@ -2,7 +2,7 @@
 
 The monitor uses a GitHub Actions workflow, an externally configured dispatch schedule, Bark for iPhone notifications, and optional Cloudflare historical storage.
 
-The current source configuration checks **IT 341 DL1 (CRN 17593)** and **IT 343 DL3 (CRN 21051)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
+The current source configuration checks **IT 341 DL1 (CRN 17593)** and **IT 343 DL1 (CRN 17599), DL2 (CRN 20981), and DL3 (CRN 21051)** in the public Spring 2027 catalog. **IT 304 DL1 (CRN 17582) is retired**: its cached snapshots, historical observations and dashboard history remain available, but it is excluded from live polling and seat notifications. The monitor does not perform registration actions or use student credentials.
 
 ## Prerequisites
 
@@ -25,25 +25,23 @@ The operational workflow is [`.github/workflows/seat-monitor.yml`](.github/workf
 
 To pause polling, disable external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the operational workflow.
 
-## Adding IT 343 DL3
+## Monitoring all three IT 343 sections
 
-The source configuration now has **two active targets and one retired course**.
+The source configuration now has **four active targets and one retired course**.
 Each target declares `number`, `section`, `name` and `status` in `monitor.py`;
 `get_section()` verifies term, subject, number, CRN and that exact section.
 Live capture derives the same section from the configured identity rather than
 assuming DL1. The dashboard mirrors these fields, guarded by an offline parity test.
 
-IT 343 uses the unchanged alert policy. The supplied 16-total / 0-unreserved /
+All three IT 343 sections use the unchanged alert policy. Comparison state, observation identity and event baselines are keyed by CRN (with term in history), never by course number alone. Notifications include the section and CRN. No IT 343 section is retired automatically; wait for explicit registration confirmation and review the status change. The supplied 16-total / 0-unreserved /
 16-reserved snapshot is a reference and synthetic test fixture only. Do not seed
-`seat_state.json`, D1, or replay payloads from it. No data is displayed for IT 343
-until a real completed lookup is captured. Until then active-course freshness is
-`no_data`; a recent IT 341 observation alone cannot make both targets healthy.
+`seat_state.json`, D1, or replay payloads from it. Each newly added section stays missing until its own real completed lookup is captured. Until all four active targets have valid observations, active-course freshness remains `no_data`; recent observations from other sections cannot hide the missing one.
 
 After separate release approval, publish the monitor/capture changes and require
 full Ubuntu CI, then separately deploy the updated dashboard using its existing
-binding and read token. The ingestion Worker and schema already support DL3;
+binding and read token. The ingestion Worker and schema already support all three sections;
 **no ingestion deployment, migration, new credential or polling-frequency change**
-is required. Preserve all IT 304/341 records and the existing approval/history
+is required. Preserve all existing IT 304, IT 341 and IT 343 records and the existing approval/history
 opt-ins. Do not manually dispatch monitoring or insert reference records as a
 shortcut to verification.
 
@@ -59,8 +57,8 @@ shortcut to verification.
   retired, the monitor exits without catalog requests or history capture.
 - Status is current configuration, not a historical fact added to old payloads.
   Ingestion validation, original UUIDs, retry bytes and event calculations remain
-  unchanged for existing courses; the existing generic historical validators also accept IT 343 DL3. Do not delete D1 rows, cache entries or backups.
-- Dashboard charts/events retain all three course histories in the selected window.
+  unchanged for existing courses; the existing generic historical validators also accept IT 343 DL1, DL2 and DL3. Do not delete D1 rows, cache entries or backups.
+- Dashboard charts/events retain all five configured course/section histories in the selected window.
   Latest stored snapshots also remain visible when older than that window.
   Retired totals are labelled history-only, not current availability. Freshness
   uses the oldest latest active-course observation across all history; fresh
@@ -73,16 +71,16 @@ shortcut to verification.
 
 After review, publish the monitor/configuration and tests to the workflow's
 configured branch and require successful Ubuntu CI. Confirm no older workflow
-execution is still using the previous two-active-course source. Keep the existing
+execution is still using the previous target configuration. Keep the existing
 external cadence, approval gate, Bark secret and history opt-ins unchanged.
 Separately deploy only the reviewed dashboard source using its existing DB
 binding and read token; no ingestion Worker deployment or schema migration is
-needed. Then inspect an authorized check for one IT 341 lookup and one IT 343 DL3 lookup, one retired
+needed. Then inspect an authorized check for one IT 341 lookup and three independently matched IT 343 lookups, one retired
 health row, unchanged IT 304 history, and correct dashboard freshness. No live
 check or Cloudflare deployment is authorized merely by editing these files.
 
 If dashboard rollback is necessary, preserve D1 and the monitor's retired status.
-Do not revert to a two-active-course monitor just to restore presentation.
+Do not revert to an older target configuration just to restore presentation.
 
 ## Historical ingestion and dashboard
 
@@ -96,7 +94,7 @@ Keep ingestion credentials separate from the dashboard read token. GitHub source
 
 ## Actionable Bark alert settings
 
-Qualifying openings for both active courses request `sound=alarm`, `call=1`,
+Qualifying openings for all four active targets request `sound=alarm`, `call=1`,
 `level=critical`, and `volume=10`. The `call` and `volume` values are serialized
 as strings following the [Bark API V2 contract](https://github.com/Finb/bark-server/blob/master/docs/API_V2.md).
 Reservation-aware decisions, duplicate suppression, titles, message bodies,

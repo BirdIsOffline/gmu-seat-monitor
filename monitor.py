@@ -24,6 +24,8 @@ TERM_NAME = "Spring 2027"
 COURSES = {
     "17582": {"name": "IT 304 DL1", "number": "304", "section": "DL1", "status": "retired"},
     "17593": {"name": "IT 341 DL1", "number": "341", "section": "DL1", "status": "active"},
+    "17599": {"name": "IT 343 DL1", "number": "343", "section": "DL1", "status": "active"},
+    "20981": {"name": "IT 343 DL2", "number": "343", "section": "DL2", "status": "active"},
     "21051": {"name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active"},
 }
 

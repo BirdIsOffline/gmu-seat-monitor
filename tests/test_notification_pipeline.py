@@ -122,7 +122,7 @@ class ActionableBarkParametersTests(unittest.TestCase):
         # Mock the local beep as well as HTTP; no device receives a notification.
         self.enterContext(patch.dict(sys.modules, {"winsound": Mock()}))
 
-    def test_both_active_courses_send_exact_critical_parameters_and_unchanged_messages(self):
+    def test_all_four_active_courses_send_exact_critical_parameters_and_unchanged_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
             state_path=Path(tmp)/"seat_state.json"
             state={"17582":{"seatsAvailable":18}}
@@ -136,7 +136,7 @@ class ActionableBarkParametersTests(unittest.TestCase):
                   patch.object(monitor.requests,"post",return_value=reply) as send,
                   patch.object(monitor.time,"sleep"),contextlib.redirect_stdout(io.StringIO())):
                 self.assertEqual(monitor.check_once("202710",state),0)
-                self.assertEqual(send.call_count,2)
+                self.assertEqual(send.call_count,4)
                 for call,(crn,c) in zip(send.call_args_list,monitor.active_courses().items()):
                     self.assertEqual(call.args,("https://api.day.app/push",))
                     self.assertEqual(call.kwargs["timeout"],15)
@@ -156,11 +156,11 @@ class ActionableBarkParametersTests(unittest.TestCase):
                 self.assertEqual(monitor.check_once("202710",state),0)
                 for crn,c in monitor.active_courses().items():current[crn]=public_row(crn,c["number"],0,16,c["section"])
                 self.assertEqual(monitor.check_once("202710",state),0)
-                self.assertEqual(send.call_count,2)
+                self.assertEqual(send.call_count,4)
             self.assertEqual(state["17582"],{"seatsAvailable":18})
             self.assertEqual(json.loads(state_path.read_text()),state)
 
-    def test_both_active_reserved_only_increases_never_send_a_critical_alert(self):
+    def test_all_active_reserved_only_increases_never_send_a_critical_alert(self):
         state={crn:monitor.snapshot(public_row(crn,c["number"],0,15,c["section"])) for crn,c in monitor.active_courses().items()}
         with (patch.object(monitor,"get_section",side_effect=lambda term,crn,number:public_row(crn,number,0,16,monitor.COURSES[crn]["section"])),
               patch.object(monitor,"save_state"),patch.object(monitor,"read_bark_key") as key,

@@ -100,7 +100,7 @@ only with synthetic inputs. There is no historical retry path to GMU or Bark.
 5. The earliest unresolved check blocks all later checks sharing any term/CRN.
    This includes deferred and permanently blocked records, and dependencies
    propagate through multi-course batches. Independent courses can progress;
-   a historical two-course batch blocks both members together. Current source checks contain active IT 341 DL1 and IT 343 DL3; retiring IT 304 does not discard or alter older queued two-course batches.
+   a historical two-course batch blocks both members together. Current source checks contain active IT 341 DL1 and IT 343 DL1, DL2 and DL3; retiring IT 304 does not discard or alter older queued two-course batches.
 6. An OS `flock` serializes enqueue and drain across processes. It is held through
    HTTP; there is no expiring lease that could permit a slow old sender to commit
    after a new owner. Contention fails immediately with `OUTBOX_BUSY`. Only the
@@ -265,10 +265,10 @@ with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as db:
 
 ## Quotas, retention and realistic guarantees
 
-At two active courses every five minutes: 288 completed checks and up to 576
+At four active targets every five minutes: 288 completed checks and up to 1,152
 observations per day. Older two-course batches and synthetic examples remain valid. A batched normal drain makes about 288 Worker requests/day, plus retries;
 an outage does not cause each newer same-course record to be attempted repeatedly.
-The base D1 inserts are about 864 rows/day for two active courses plus opening events, index maintenance,
+The base D1 inserts are about 1,440 rows/day for four active targets plus opening events, index maintenance,
 check upsert writes and retries. D1 bills/counts affected/indexed rows, not merely
 HTTP requests; measure actual writes and query scans before enabling anything.
 
@@ -282,7 +282,7 @@ for the actual plan before activation. Limit backfill volume, share budgets with
 other workloads and stop on quota/storage failure. Public/private Actions quotas
 are separate; no extra monitoring run, polling or schedule is introduced here.
 
-Storage grows indefinitely: at this rate roughly 105,120 checks and 210,240
+Storage grows indefinitely: at this rate roughly 105,120 checks and 420,480
 observations per year, plus payloads, receipts, events and indexes. Disk/D1 size
 must be measured; no storage lifespan is promised. This version intentionally
 does not prune deduplication bodies or attempted frontiers. A retention policy
