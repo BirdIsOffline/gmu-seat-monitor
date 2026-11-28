@@ -12,7 +12,7 @@ The D1 binding is a normal binding, not an SQL-enforced read-only role. Fixed SE
 
 ## Section identities
 
-Cards, legends and chart identities derive from the dashboard course configuration and use CRNs rather than course numbers. The [target table](../README.md#section-identity-and-lifecycle) configures six active sections and one retired section; the new IT 304 DL2 identity requires publication and dashboard deployment. Every section, including both IT 304 sections and the three IT 343 sections, has its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
+Cards, legends and chart identities derive from the dashboard course configuration and use CRNs rather than course numbers. The deployed [target table](../README.md#section-identity-and-lifecycle) has six active sections and one retired section, including active IT 304 DL2 and retired IT 304 DL1. Every section, including both IT 304 sections and the three IT 343 sections, has its own total, latest row, color and event identity. Equal values can overlap on the chart without merging data.
 
 Retired history remains queryable. Latest snapshots can predate the selected chart window and are labelled history-only. Status is current configuration, separate from historical observations.
 
@@ -41,17 +41,17 @@ The browser ages status once a minute but loads new records only on login, expli
 
 ## Verification
 
-The published [main CI baseline](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46063339936) passed all 32 dashboard tests as part of the 287-test suite, before IT 304 DL2. Tests cover authentication, fixed SQL, section isolation, freshness, missing data and rendering. The current seven-identity capacity fixture checks all 14,112 nominal seven-day samples.
+The verified [main CI run](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46114809008) passed all 34 dashboard tests as part of the 296-test suite. Tests cover authentication, fixed SQL, section isolation, freshness, missing data and rendering. The current seven-identity capacity fixture checks all 14,112 nominal seven-day samples.
 
-Live verification of the deployed six-identity release confirmed:
+Live verification of the deployed seven-identity release confirmed:
 
 - Authenticated HTTP 200 and missing/invalid-token HTTP 401.
-- Six separate cards, legends and latest-observation rows, with IT 304 retired and all five other sections active.
+- Seven separate cards, legends and latest-observation rows, with IT 304 DL1 retired and all six other sections active.
 - Independent freshness inputs from every active section and correct aggregate status in both 24-hour and seven-day views.
-- Both chart ranges, the then-current 14,000-row query bound and no JavaScript exceptions.
+- Both chart ranges, the 16,000-row query bound and no JavaScript exceptions or console errors.
 - Exact preservation of all baseline checks and observations, including retired IT 304 history.
 - Missing-data handling for each active section through browser-only omission replay, without database changes.
 
-IT 342 had one observation at verification, so its card, legend and data were checked but it had no connecting chart segment. Multi-point rendering is covered by automated fixtures. No historical opening events existed at that check; the live empty state and synthetic event rendering passed, while live event-row rendering remains unverified.
+IT 304 DL2 accumulated two real observations through natural monitoring, and its connecting chart segment was verified in both ranges. Six browser-only missing-data cases and five out-of-order response/error cases passed without production writes. Subsequent natural monitoring passed all six active checks and ingested history with masked credentials. No historical opening events existed at verification; the live empty state and synthetic event rendering passed, while live event-row rendering remains unverified.
 
 Run `node --check dashboard/worker.js` and `node --test dashboard/worker.test.mjs`. These use mocks, disposable SQLite and a DOM substitute. See the [deployment runbook](DEPLOYMENT.md).
