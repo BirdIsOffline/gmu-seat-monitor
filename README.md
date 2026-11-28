@@ -21,7 +21,7 @@ See the [system diagram](docs/SYSTEM_DIAGRAM.md) and [design decisions](docs/ARC
 
 ## Section identity and lifecycle
 
-All five active Spring 2027 sections are deployed and verified:
+The configuration contains six active Spring 2027 sections and one retired section. IT 304 DL2 is newly configured locally; publication and dashboard deployment are pending.
 
 | Section | CRN | Status |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ All five active Spring 2027 sections are deployed and verified:
 | IT 343 DL1 | 17599 | Active |
 | IT 343 DL2 | 20981 | Active |
 | IT 343 DL3 | 21051 | Active |
+| IT 304 DL2 | 21146 | Active |
 
 Comparison state and dashboard identities use CRNs; history uses `(term, crn)`. Sections sharing a course number retain independent observations and alerts. CI checks monitor/dashboard configuration parity.
 
@@ -41,17 +42,17 @@ Retirement stops polling and alerts while preserving state, observations and eve
 - Known reserved-only seats do not trigger alerts. Explicit unreserved counts are capped by the total; missing reservation metadata remains uncertain, and conflicting or unparseable restrictions suppress alerts.
 - Increasing candidate counts trigger notifications identifying section and CRN. Unchanged or decreasing counts stay silent while comparison state survives.
 - Actionable notifications use `sound=alarm`, `call=1`, `level=critical` and `volume=10`.
-- The dashboard shows six independent identities in 24-hour and seven-day views. All five active sections need valid recent observations for healthy aggregate freshness; retired history is excluded from that calculation.
+- The dashboard supports seven independent identities in 24-hour and seven-day views. All six active sections need valid recent observations for healthy aggregate freshness; retired history is excluded from that calculation.
 
 ## Dashboard preview
 
 [![Synthetic dashboard preview showing six course identities, historical charts, active-course freshness and recorded coverage metrics](docs/assets/dashboard-synthetic.png)](docs/assets/dashboard-synthetic.png)
 
-*Rendered locally with synthetic observations and events; no live monitoring or production history.*
+*Rendered locally with synthetic observations and events using the earlier six-identity configuration; no live monitoring or production history.*
 
 ## Verified results
 
-[Main CI run 45962142154](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45962142154) passed **252 tests with zero failures or skips**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
+[Main CI run 46063339936](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46063339936) passed **287 tests with zero failures or skips**: 226 Python, 29 Worker/D1 integration and 32 dashboard tests. This is the published baseline before IT 304 DL2. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
 
 The deployed six-identity dashboard passed authenticated HTTP 200 and unauthorized HTTP 401 checks, both chart ranges, five-section freshness and exact preservation of baseline history. Missing-data display was tested in the browser without production writes. The [dashboard verification record](dashboard/README.md#verification) describes chart and event-rendering limits.
 
@@ -76,6 +77,6 @@ Tests use mocks, disposable databases and loopback connections. Installation acc
 - Live polling requires permission and the `GMU_POLLING_APPROVED` gate. Dispatch is best-effort; brief openings between samples can be missed. Cache loss can reset duplicate suppression.
 - Seat counts do not establish registration eligibility. The monitor does not access student accounts or register for classes. Phone delivery depends on Bark, iOS permissions and device settings.
 - An ephemeral runner can lose observations before D1 acknowledges them. No production recovery-time or recovery-point guarantee has been established.
-- History has no automatic pruning. The dashboard is single-term and returns at most 14,000 samples and 50 events per view. A Git push does not deploy either Worker.
+- History has no automatic pruning. The dashboard is single-term and returns at most 16,000 samples and 50 events per view. A Git push does not deploy either Worker.
 
 [Operations](CLOUD_SETUP.md) · [History design and recovery](docs/CLOUDFLARE_DURABLE_HISTORY.md) · [Dashboard](dashboard/README.md) · [Security](SECURITY.md) · [Limitations and extensions](docs/ROADMAP.md)

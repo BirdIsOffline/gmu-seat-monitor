@@ -23,7 +23,7 @@ def row(crn="17596", unreserved=0):
 
 class IT342Tests(unittest.TestCase):
     def test_identity_and_existing_lifecycle_are_preserved(self):
-        self.assertEqual(list(monitor.active_courses()),["17593","17596","17599","20981","21051"])
+        self.assertEqual(list(monitor.active_courses()),["17593","17596","17599","20981","21051","21146"])
         self.assertEqual(monitor.COURSES["17596"],{"name":"IT 342 DL1","number":"342","section":"DL1","status":"active"})
         self.assertEqual(monitor.COURSES["17582"]["status"],"retired")
         self.assertEqual(monitor.course_section("17596","342"),"DL1")
@@ -53,7 +53,7 @@ class IT342Tests(unittest.TestCase):
             self.assertEqual(monitor.check_once("202710",state),0);self.assertEqual(notify.call_count,1)
             self.assertEqual(json.loads(monitor.STATE_PATH.read_text())["17596"],state["17596"])
             self.assertTrue(health_runner.state_is_valid(monitor.STATE_PATH))
-            self.assertEqual([c.args for c in lookup.call_args_list[:5]],[("202710",crn,c["number"]) for crn,c in monitor.active_courses().items()])
+            self.assertEqual([c.args for c in lookup.call_args_list[:len(monitor.active_courses())]],[("202710",crn,c["number"]) for crn,c in monitor.active_courses().items()])
         for crn,original in before.items():self.assertEqual(state[crn],original)
 
     def test_health_requires_the_new_target(self):
@@ -61,11 +61,11 @@ class IT342Tests(unittest.TestCase):
         self.assertTrue(health_runner.summarize_output("".join(lines.values()),0)[0])
         self.assertFalse(health_runner.summarize_output("".join(text for crn,text in lines.items() if crn!="17596"),0)[0])
 
-    def test_payload_accepts_six_independent_identities_without_rewriting_bytes(self):
+    def test_payload_accepts_seven_independent_identities_without_rewriting_bytes(self):
         observations=[CourseObservation("202710","IT",c["number"],c["section"],crn,0) for crn,c in monitor.COURSES.items()]
         prepared=prepare_check(str(uuid.uuid4()),datetime.now(timezone.utc),.25,observations)
         before=prepared.body;validate_prepared(prepared);self.assertEqual(before,prepared.body)
-        rows=json.loads(before)["observations"];self.assertEqual(len(rows),6)
+        rows=json.loads(before)["observations"];self.assertEqual(len(rows),7)
         self.assertEqual(next(r for r in rows if r["crn"]=="17596")["course_number"],"342")
 
     def test_new_history_preserves_all_existing_course_records(self):

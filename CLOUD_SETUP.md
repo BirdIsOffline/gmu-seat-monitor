@@ -37,13 +37,13 @@ Secret masking does not erase existing logs. GitHub deletes all logs for a run, 
 
 [The monitoring workflow](.github/workflows/seat-monitor.yml) is dispatched with `mode=check` by the external scheduler. It checks the polling gate, restores state, runs `health_runner.py`, validates and caches public seat state, then submits captured observations when both history opt-ins are enabled. History failure has a separate outcome and cannot replace monitoring health.
 
-The cadence is five minutes. Dispatch acceptance does not guarantee a job starts or finishes on time. The concurrency group uses `cancel-in-progress: false`; GitHub pending-run handling is not a durable queue of every request. The health runner has a 240-second monitor timeout, the job a five-minute budget, and submission a separate 20-second deadline within the remaining budget.
+The cadence is five minutes. Dispatch acceptance does not guarantee a job starts or finishes on time. The concurrency group uses `cancel-in-progress: false`; GitHub pending-run handling is not a durable queue of every request. The health runner has a 240-second monitor timeout, the job a five-minute budget, and submission a separate 20-second deadline within the remaining budget. Six active sections make 24 catalog requests per pass plus six two-second pauses. A synthetic 250 ms/request fixture takes 18 seconds, excluding term discovery, notification delivery and runner setup. This is not a live latency measurement. Slow catalog responses can exceed the unchanged 240-second supervisor limit; incomplete checks fail health validation rather than reporting success.
 
 To pause polling, stop external dispatch and set `GMU_POLLING_APPROVED=false`, or disable the monitoring workflow. Preserve state and history. Offline CI is separate and does not need monitoring credentials.
 
 ## Course retirement and release
 
-All five active sections in the [target table](README.md#section-identity-and-lifecycle) are deployed and verified; IT 304 remains retired. Matching requires the exact term, subject, number, section and CRN.
+The [target table](README.md#section-identity-and-lifecycle) configures six active sections. IT 304 DL2 is a local addition pending publication and dashboard deployment; IT 304 DL1 remains retired. Matching requires the exact term, subject, number, section and CRN.
 
 Maintain statuses in `monitor.py` and `dashboard/worker.js`; CI verifies parity. Retirement excludes lookups and alerts but preserves state, observations, delayed historical ingestion and events. Invalid status fails validation. All-retired configuration exits without catalog lookups or capture.
 

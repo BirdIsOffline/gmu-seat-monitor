@@ -141,7 +141,7 @@ def section_row(crn, unreserved=0, reserved=16):
 
 class IT343MultiSectionTests(unittest.TestCase):
     def setUp(self):
-        original = {crn:c for crn,c in monitor.COURSES.items() if crn != "17596"}
+        original = {crn:c for crn,c in monitor.COURSES.items() if crn not in ("17596", "21146")}
         self.enterContext(patch.object(monitor,"COURSES",original))
         self.enterContext(patch.object(health_runner,"COURSES",original))
 
