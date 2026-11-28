@@ -43,7 +43,7 @@ To pause polling, stop external dispatch and set `GMU_POLLING_APPROVED=false`, o
 
 ## Course retirement and release
 
-The [target table](README.md#section-identity-and-lifecycle) configures six active sections. IT 304 DL2 is a local addition pending publication and dashboard deployment; IT 304 DL1 remains retired. Matching requires the exact term, subject, number, section and CRN.
+All six active sections in the [target table](README.md#section-identity-and-lifecycle), including IT 304 DL2, are deployed and verified. IT 304 DL1 remains retired with its historical observations preserved. Matching requires the exact term, subject, number, section and CRN.
 
 Maintain statuses in `monitor.py` and `dashboard/worker.js`; CI verifies parity. Retirement excludes lookups and alerts but preserves state, observations, delayed historical ingestion and events. Invalid status fails validation. All-retired configuration exits without catalog lookups or capture.
 

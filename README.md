@@ -21,7 +21,7 @@ See the [system diagram](docs/SYSTEM_DIAGRAM.md) and [design decisions](docs/ARC
 
 ## Section identity and lifecycle
 
-The configuration contains six active Spring 2027 sections and one retired section. IT 304 DL2 is newly configured locally; publication and dashboard deployment are pending.
+All six active Spring 2027 sections are deployed and verified; IT 304 DL1 remains retired with its history preserved.
 
 | Section | CRN | Status |
 | --- | --- | --- |
@@ -52,9 +52,9 @@ Retirement stops polling and alerts while preserving state, observations and eve
 
 ## Verified results
 
-[Main CI run 46063339936](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46063339936) passed **287 tests with zero failures or skips**: 226 Python, 29 Worker/D1 integration and 32 dashboard tests. This is the published baseline before IT 304 DL2. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
+[Main CI run 46114809008](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46114809008) passed **296 tests with zero failures or skips**: 232 Python, 30 Worker/D1 integration and 34 dashboard tests. Coverage includes section isolation, reservations, duplicate suppression, retries, transaction rollback, delayed observations, interruption, locking and rendering.
 
-The deployed six-identity dashboard passed authenticated HTTP 200 and unauthorized HTTP 401 checks, both chart ranges, five-section freshness and exact preservation of baseline history. Missing-data display was tested in the browser without production writes. The [dashboard verification record](dashboard/README.md#verification) describes chart and event-rendering limits.
+The deployed seven-identity dashboard passed authenticated HTTP 200 and unauthorized HTTP 401 checks, both chart ranges, six-section freshness and exact preservation of baseline history. IT 304 DL2 also passed natural monitoring and historical ingestion checks. Missing-data display was tested in the browser without production writes. The [dashboard verification record](dashboard/README.md#verification) describes chart and event-rendering limits.
 
 A controlled Bark alarm test rang for approximately 20 seconds on the iPhone. It tested notification playback, not a genuine seat opening. See the [notification contract](CLOUD_SETUP.md#bark-notification-contract).
 

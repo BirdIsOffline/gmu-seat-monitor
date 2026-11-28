@@ -15,7 +15,7 @@ node --check dashboard/worker.js
 node --test dashboard/worker.test.mjs
 ```
 
-[Main CI run 45937201337](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/45937201337) passed **252 tests with zero failures or skips**: 198 Python, 29 Worker/D1 integration and 25 dashboard tests. The suite checks protocol and application behavior using mocks and local integration. Use the committed npm lockfile.
+[Main CI run 46114809008](https://github.com/BirdIsOffline/gmu-seat-monitor/actions/runs/46114809008) passed **296 tests with zero failures or skips**: 232 Python, 30 Worker/D1 integration and 34 dashboard tests. The suite checks protocol and application behavior using mocks and local integration. Use the committed npm lockfile.
 
 ## Demonstrations
 
