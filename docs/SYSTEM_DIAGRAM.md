@@ -26,7 +26,7 @@ flowchart TB
 - No student account login, enrollment, registration changes or CAPTCHA bypass.
 - Cloudflare ingestion and dashboard use distinct authentication secrets; the dashboard is a separate read-only query path.
 - Historical source facts can still be lost if an ephemeral GitHub runner disappears before acknowledgment.
-- The [target configuration](../README.md#section-identity-and-lifecycle) has five active identities and one retired identity. CRNs separate sections; active observations alone determine freshness. See [term lifecycle](TERM_LIFECYCLE.md).
+- The [target configuration](../README.md#section-identity-and-lifecycle) has six active identities and one retired identity. CRNs separate sections; active observations alone determine freshness. See [term lifecycle](TERM_LIFECYCLE.md).
 - Cloudflare Worker deployment is manual and separate from Git publication.
 
 ## Offline verification

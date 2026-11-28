@@ -28,6 +28,7 @@ COURSES = {
     "17599": {"name": "IT 343 DL1", "number": "343", "section": "DL1", "status": "active"},
     "20981": {"name": "IT 343 DL2", "number": "343", "section": "DL2", "status": "active"},
     "21051": {"name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active"},
+    "21146": {"name": "IT 304 DL2", "number": "304", "section": "DL2", "status": "active"},
 }
 
 STATE_PATH = Path(__file__).with_name("seat_state.json")

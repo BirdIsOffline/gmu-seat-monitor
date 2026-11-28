@@ -27,7 +27,7 @@ The outbox is durable only while its filesystem survives. It needs a single POSI
 5. The earliest unresolved check blocks all later checks sharing any term/CRN.
    This includes deferred and permanently blocked records, and dependencies
    propagate through multi-course batches. Independent courses can progress;
-   a historical two-course batch blocks both members together. The current [target table](../README.md#section-identity-and-lifecycle) has five active sections. Retirement does not discard or alter older queued batches, including those containing IT 304.
+   a historical two-course batch blocks both members together. The current [target table](../README.md#section-identity-and-lifecycle) has six active sections. Retirement does not discard or alter older queued batches, including those containing IT 304.
 6. An OS `flock` serializes enqueue and drain across processes. It is held through
    HTTP; there is no expiring lease that could permit a slow old sender to commit
    after a new owner. Contention fails immediately with `OUTBOX_BUSY`. Only the

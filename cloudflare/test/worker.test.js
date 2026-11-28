@@ -573,3 +573,19 @@ test("IT342 ingestion preserves existing identities and deduplicates its own his
   const after=await rows('observations');assert.deepEqual(after.filter(o=>o.crn!=='17596'),before);
   assert.equal(after.filter(o=>o.crn==='17596').length,2);assert.equal((await rows('opening_events')).length,1);
 });
+
+
+test("IT304 DL2 ingestion is independent of retired DL1 and preserves replay receipts", async () => {
+  const original=payload({observations:[course(),course({crn:'17593',course_number:'341'}),course({crn:'17596',course_number:'342'}),...['17599','20981','21051'].map((crn,i)=>course({crn,course_number:'343',section:'DL'+(i+1)}))]});
+  assert.equal((await send(original)).status,200);const before=await rows('observations');
+  const target=count=>course({crn:'21146',course_number:'304',section:'DL2',total_available:4,reserved_summary:{unreservedAvailable:count,reservedAvailable:4-count}});
+  assert.equal((await send(payload({executed_at_utc:'2026-11-09T00:05:00.000000+00:00',observations:[target(0)]}))).status,200);
+  assert.equal((await rows('opening_events')).length,0);
+  const opening=payload({executed_at_utc:'2026-11-09T00:10:00.000000+00:00',observations:[target(1)]});
+  assert.equal((await send(opening)).status,200);const committed=await rows('observations'),events=await rows('opening_events');
+  assert.deepEqual(committed.filter(o=>o.crn!=='21146'),before);
+  assert.equal(committed.filter(o=>o.crn==='21146').length,2);assert.equal(events.length,1);
+  assert.equal(committed.find(o=>o.observation_id===events[0].observation_id).crn,'21146');
+  assert.equal((await send(opening)).status,200);
+  assert.deepEqual(await rows('observations'),committed);assert.deepEqual(await rows('opening_events'),events);
+});

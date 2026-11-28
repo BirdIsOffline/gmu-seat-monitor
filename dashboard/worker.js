@@ -6,7 +6,8 @@ export const COURSES = [
   {"crn": "17596", "name": "IT 342 DL1", "number": "342", "section": "DL1", "status": "active", "color": "#6dd5ef"},
   {"crn": "17599", "name": "IT 343 DL1", "number": "343", "section": "DL1", "status": "active", "color": "#c4a0ff"},
   {"crn": "20981", "name": "IT 343 DL2", "number": "343", "section": "DL2", "status": "active", "color": "#ff9bb5"},
-  {"crn": "21051", "name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active", "color": "#7addaa"}
+  {"crn": "21051", "name": "IT 343 DL3", "number": "343", "section": "DL3", "status": "active", "color": "#7addaa"},
+  {"crn": "21146", "name": "IT 304 DL2", "number": "304", "section": "DL2", "status": "active", "color": "#e8d76d"}
 ];
 const IDS = COURSES.map(course => course.crn);
 const PLACEHOLDERS = IDS.map(() => '?').join(', ');
@@ -236,7 +237,7 @@ async function dashboard(db, range) {
       FROM checks WHERE executed_at_utc >= ?`).bind(since).all(),
     db.prepare(`SELECT crn, observed_at_utc, total_available, unreserved_available, classification
       FROM observations WHERE crn IN (${PLACEHOLDERS}) AND observed_at_utc >= ?
-      ORDER BY observed_at_utc ASC, crn ASC LIMIT 14000`).bind(...IDS, since).all(),
+      ORDER BY observed_at_utc ASC, crn ASC LIMIT 16000`).bind(...IDS, since).all(),
     db.prepare(`SELECT o.crn, e.detected_at_utc, e.previous_available, e.new_available, e.classification
       FROM opening_events e JOIN observations o ON e.observation_id=o.observation_id
       WHERE e.detected_at_utc >= ? AND o.crn IN (${PLACEHOLDERS})
